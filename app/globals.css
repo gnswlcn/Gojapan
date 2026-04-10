@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+body {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
