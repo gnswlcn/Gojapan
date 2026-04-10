@@ -14,8 +14,8 @@ export default function ExampleSentence({ segments, knownWords }: ExampleSentenc
     <div className="text-sm leading-relaxed text-center flex flex-wrap justify-center gap-x-0.5">
       {segments.map((seg, i) => {
         const isKnown = seg.wId !== null && knownSet.has(seg.wId);
-        // Known word → Korean (easy to read), Unknown → Japanese (learn the script)
-        const text = isKnown ? seg.ko : seg.jp;
+        // Known word → Japanese (can read it), Unknown → Korean (understand context)
+        const text = isKnown ? seg.jp : seg.ko;
         const isTarget = seg.wId !== null && !knownSet.has(seg.wId);
 
         return (
