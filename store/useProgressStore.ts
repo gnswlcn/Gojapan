@@ -5,6 +5,12 @@ import { persist } from 'zustand/middleware';
 
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1';
 
+export interface ExampleSegment {
+  jp: string;
+  ko: string;
+  wId: string | null;
+}
+
 export interface Word {
   id: string;
   kanji: string;
@@ -12,6 +18,7 @@ export interface Word {
   meaning_ko: string;
   level: JlptLevel;
   category: string;
+  example?: ExampleSegment[];
 }
 
 export interface DailyStats {
