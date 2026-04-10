@@ -1,6 +1,19 @@
 import type { Word, JlptLevel } from '@/store/useProgressStore';
+import n5 from '@/data/n5.json';
+import n4 from '@/data/n4.json';
+import n3 from '@/data/n3.json';
+import n2 from '@/data/n2.json';
+import n1 from '@/data/n1.json';
 
 const DUNGEON_SIZE = 10;
+
+const WORD_DATA: Record<JlptLevel, Word[]> = {
+  N5: n5 as Word[],
+  N4: n4 as Word[],
+  N3: n3 as Word[],
+  N2: n2 as Word[],
+  N1: n1 as Word[],
+};
 
 // Shuffle array (Fisher-Yates)
 function shuffle<T>(arr: T[]): T[] {
@@ -13,9 +26,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export async function loadWords(level: JlptLevel): Promise<Word[]> {
-  const key = level.toLowerCase(); // 'n5', 'n4', etc.
-  const data = await import(`@/data/${key}.json`);
-  return data.default as Word[];
+  return WORD_DATA[level];
 }
 
 export function selectDungeonWords(
