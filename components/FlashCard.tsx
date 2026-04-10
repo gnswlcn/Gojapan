@@ -78,7 +78,7 @@ export default function FlashCard({ word, onKnown, onLearning, cardIndex, knownW
           {/* Example sentence */}
           {word.example && (
             <div className="w-full max-w-xs bg-white/5 rounded-2xl px-4 py-3">
-              <ExampleSentence segments={word.example} knownWords={knownWords} />
+              <ExampleSentence segments={word.example} knownWords={knownWords} currentWordId={word.id} />
             </div>
           )}
         </div>
