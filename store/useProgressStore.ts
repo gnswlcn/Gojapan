@@ -33,6 +33,7 @@ export interface DailyStats {
 
 interface ProgressState {
   wordProgress: Record<string, WordProgress>;
+  completedEpisodes: string[];
   currentWorld: JlptLevel;
   streak: number;
   lastStudiedDate: string;
@@ -41,6 +42,7 @@ interface ProgressState {
   // Actions
   increaseConfidence: (wordId: string, amount?: number) => void;
   decreaseConfidence: (wordId: string) => void;
+  markEpisodeComplete: (episodeId: string) => void;
   recordDailyStudy: (studied: number, known: number) => void;
   setCurrentWorld: (level: JlptLevel) => void;
   resetProgress: () => void;
@@ -64,6 +66,7 @@ export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
       wordProgress: {},
+      completedEpisodes: [],
       currentWorld: 'N5',
       streak: 0,
       lastStudiedDate: '',
@@ -93,6 +96,13 @@ export const useProgressStore = create<ProgressState>()(
           };
         }),
 
+      markEpisodeComplete: (episodeId: string) =>
+        set((state) => ({
+          completedEpisodes: state.completedEpisodes.includes(episodeId)
+            ? state.completedEpisodes
+            : [...state.completedEpisodes, episodeId],
+        })),
+
       recordDailyStudy: (studied: number, known: number) => {
         const todayStr = today();
         const state = get();
@@ -118,6 +128,7 @@ export const useProgressStore = create<ProgressState>()(
       resetProgress: () =>
         set({
           wordProgress: {},
+          completedEpisodes: [],
           currentWorld: 'N5',
           streak: 0,
           lastStudiedDate: '',

@@ -1,6 +1,7 @@
 {
   "episode_info": {
     "id": "ep001",
+    "world": "N5",
     "title": "편의점에서",
     "title_jp": "コンビニで",
     "setting_ko": "편의점",
@@ -9,6 +10,18 @@
     "thumbnail": "🏪",
     "description": "편의점 점원과 기본 대화를 연습해봐요"
   },
+  "vocabulary": [
+    { "id": "ep001_v01", "kanji": "袋", "reading": "ふくろ", "meaning_ko": "봉투" },
+    { "id": "ep001_v02", "kanji": "ご利用", "reading": "ごりよう", "meaning_ko": "이용" },
+    { "id": "ep001_v03", "kanji": "一枚", "reading": "いちまい", "meaning_ko": "한 장" },
+    { "id": "ep001_v04", "kanji": "大丈夫", "reading": "だいじょうぶ", "meaning_ko": "괜찮다" },
+    { "id": "ep001_v05", "kanji": "温める", "reading": "あたためる", "meaning_ko": "데우다" },
+    { "id": "ep001_v06", "kanji": "お願いします", "reading": "おねがいします", "meaning_ko": "부탁드려요" },
+    { "id": "ep001_v07", "kanji": "お会計", "reading": "おかいけい", "meaning_ko": "계산, 결제" },
+    { "id": "ep001_v08", "kanji": "五百円", "reading": "ごひゃくえん", "meaning_ko": "500엔" },
+    { "id": "ep001_v09", "kanji": "ポイントカード", "reading": "ポイントカード", "meaning_ko": "포인트 카드" },
+    { "id": "ep001_v10", "kanji": "お持ち", "reading": "おもち", "meaning_ko": "가지고 계신" }
+  ],
   "dialogue_flow": [
     {
       "id": "t01",
@@ -16,7 +29,8 @@
       "jp": "いらっしゃいませ！",
       "reading": "いらっしゃいませ！",
       "ko_meaning": "어서 오세요!",
-      "type": "listen"
+      "type": "listen",
+      "vocab_ids": []
     },
     {
       "id": "t02",
@@ -25,6 +39,7 @@
       "reading": "ふくろはごりようですか？",
       "ko_meaning": "봉투는 필요하신가요?",
       "type": "choice",
+      "vocab_ids": ["ep001_v01", "ep001_v02"],
       "choices": [
         {
           "id": "a",
@@ -49,6 +64,7 @@
       "reading": "こちら、あたためますか？",
       "ko_meaning": "이거 데워드릴까요?",
       "type": "choice",
+      "vocab_ids": ["ep001_v05", "ep001_v06"],
       "choices": [
         {
           "id": "a",
@@ -72,7 +88,8 @@
       "jp": "お会計は五百円になります。",
       "reading": "おかいけいはごひゃくえんになります。",
       "ko_meaning": "합계 500엔입니다.",
-      "type": "listen"
+      "type": "listen",
+      "vocab_ids": ["ep001_v07", "ep001_v08"]
     },
     {
       "id": "t05",
@@ -81,6 +98,7 @@
       "reading": "ポイントカードはおもちですか？",
       "ko_meaning": "포인트 카드 있으신가요?",
       "type": "choice",
+      "vocab_ids": ["ep001_v09", "ep001_v10"],
       "choices": [
         {
           "id": "a",
@@ -104,7 +122,8 @@
       "jp": "ありがとうございました！またお越しください。",
       "reading": "ありがとうございました！またおこしください。",
       "ko_meaning": "감사합니다! 또 오세요.",
-      "type": "listen"
+      "type": "listen",
+      "vocab_ids": []
     }
   ]
 }
