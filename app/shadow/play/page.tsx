@@ -25,7 +25,6 @@ interface VocabWord {
 
 interface Choice {
   id: string;
-  ko: string;
   jp: string;
   reading: string;
   correct: boolean;
@@ -39,6 +38,7 @@ interface Turn {
   ko_meaning: string;
   type: 'listen' | 'choice';
   vocab_ids: string[];
+  situation?: string;   // 한국어 생각말풍선 — 내가 어떤 상황인지
   choices?: Choice[];
 }
 
@@ -504,21 +504,43 @@ function PlayContent() {
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }}
               className="flex flex-col gap-3">
-              <div className="text-xs text-gray-500 text-center mb-1 uppercase tracking-widest">
-                뭐라고 대답할까요?
+
+              {/* 한국어 생각말풍선 */}
+              {currentTurn.situation && (
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="flex items-start gap-2"
+                >
+                  <span className="text-lg mt-0.5 shrink-0">💭</span>
+                  <div className="bg-white/8 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-2.5">
+                    <p className="text-white/75 text-sm leading-relaxed italic">
+                      {currentTurn.situation}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="text-xs text-gray-500 text-center uppercase tracking-widest mt-1">
+                맞는 일본어를 골라보세요
               </div>
+
               {currentTurn.choices.map((choice) => (
                 <button
                   key={choice.id}
                   disabled={npcMood === 'attacking'}
                   onClick={() => handleChoice(choice)}
-                  className={`w-full py-5 px-6 rounded-2xl font-bold text-lg text-left
+                  className={`w-full py-4 px-5 rounded-2xl text-left
                     active:scale-95 transition-all duration-100 disabled:pointer-events-none
-                    bg-white/8 border-2 border-white/10 text-white hover:bg-white/12
+                    bg-white/8 border-2 border-white/10 hover:bg-white/12
                     ${npcMood === 'attacking' ? 'opacity-40' : ''}
                   `}
                 >
-                  {choice.ko}
+                  <div className="text-white font-bold text-lg leading-snug">{choice.jp}</div>
+                  {showReading && (
+                    <div className="text-gray-400 text-sm mt-0.5">{choice.reading}</div>
+                  )}
                 </button>
               ))}
             </motion.div>
