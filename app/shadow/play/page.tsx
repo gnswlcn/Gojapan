@@ -9,8 +9,6 @@ import ep003 from '@/data/shadow_ep003.json';
 import ep004 from '@/data/shadow_ep004.json';
 import { useProgressStore } from '@/store/useProgressStore';
 
-const BASE_PATH = '/Gojapan';
-
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface NpcConfig {
@@ -96,55 +94,10 @@ interface NpcAvatarProps {
 }
 
 function NpcAvatar({ npc, mood }: NpcAvatarProps) {
-  const [isBlinking, setIsBlinking] = useState(false);
-  const blinkRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Periodic blink: schedule next blink randomly every 2.5–5s
-  useEffect(() => {
-    if (mood === 'attacking' || !npc.image_blink) return;
-
-    const schedule = () => {
-      blinkRef.current = setTimeout(() => {
-        setIsBlinking(true);
-        blinkRef.current = setTimeout(() => {
-          setIsBlinking(false);
-          schedule(); // queue next blink
-        }, 130); // eye-close duration
-      }, 2500 + Math.random() * 2500);
-    };
-
-    schedule();
-    return () => { if (blinkRef.current) clearTimeout(blinkRef.current); };
-  }, [mood, npc.image_blink]);
-
   const shakeAnim = mood === 'attacking'
     ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.08, 1, 1.08, 1] }
     : { scale: 1, x: 0 };
 
-  if (npc.image) {
-    const src =
-      mood === 'attacking' && npc.image_attack ? npc.image_attack :
-      isBlinking && npc.image_blink             ? npc.image_blink :
-                                                  npc.image;
-    return (
-      <motion.div
-        animate={shakeAnim}
-        transition={{ duration: 0.5 }}
-        className="shrink-0 w-24 rounded-2xl overflow-hidden shadow-lg shadow-black/40 bg-white"
-      >
-        <img
-          src={BASE_PATH + src}
-          alt={npc.name}
-          width={96}
-          height={128}
-          className="w-24 h-32 object-contain object-top select-none"
-          draggable={false}
-        />
-      </motion.div>
-    );
-  }
-
-  // fallback: emoji circle
   return (
     <motion.div
       animate={shakeAnim}
