@@ -7,7 +7,21 @@
     "setting_jp": "人気レストランの入口",
     "difficulty": "N4",
     "thumbnail": "🍜",
-    "description": "갑자기 웨이팅을 취소해야 할 때, 당황하지 말고 정중하게!"
+    "description": "갑자기 웨이팅을 취소해야 할 때, 당황하지 말고 정중하게!",
+    "character": {
+      "id": "kenji",
+      "name": "켄지",
+      "name_jp": "健二",
+      "role": "식당 홀 직원",
+      "role_jp": "ホールスタッフ",
+      "personality": "바쁜 와중에도 밝게 응대하지만, 무례하거나 뚱딴지 같은 말에는 황당한 표정을 감추지 못한다.",
+      "expressions": {
+        "idle":    "😅",
+        "talking": "😃",
+        "correct": "😊",
+        "wrong":   "😑"
+      }
+    }
   },
   "vocabulary": [
     { "vocab_id": "n4_052", "jp": "理由", "reading": "りゆう", "ko": "이유" },

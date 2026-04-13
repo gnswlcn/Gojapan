@@ -7,7 +7,21 @@
     "setting_jp": "ホテルフロント（電話）",
     "difficulty": "N4",
     "thumbnail": "🏨",
-    "description": "프런트에 전화해서 수건을 추가 요청해봐요. 조수사 '枚'도 놓치지 마세요!"
+    "description": "프런트에 전화해서 수건을 추가 요청해봐요. 조수사 '枚'도 놓치지 마세요!",
+    "character": {
+      "id": "mina",
+      "name": "미나",
+      "name_jp": "美奈",
+      "role": "호텔 프런트 직원",
+      "role_jp": "フロントスタッフ",
+      "personality": "언제나 우아하고 침착한 호텔리어. 하지만 명령투를 들으면 전화 너머로도 냉기가 전해진다.",
+      "expressions": {
+        "idle":    "🙂",
+        "talking": "😊",
+        "correct": "😇",
+        "wrong":   "😶‍🌫️"
+      }
+    }
   },
   "vocabulary": [
     { "vocab_id": "n5_081", "jp": "部屋", "reading": "へや", "ko": "방" },

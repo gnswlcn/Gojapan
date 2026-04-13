@@ -7,7 +7,21 @@
     "setting_jp": "免税カウンター",
     "difficulty": "N4",
     "thumbnail": "🦝",
-    "description": "돈키호테 면세 카운터에서 여권 제시부터 사인까지 완벽하게!"
+    "description": "돈키호테 면세 카운터에서 여권 제시부터 사인까지 완벽하게!",
+    "character": {
+      "id": "yui",
+      "name": "유이",
+      "name_jp": "由依",
+      "role": "면세 카운터 직원",
+      "role_jp": "免税カウンタースタッフ",
+      "personality": "항상 프로페셔널한 미소를 유지하지만, 직역 표현에는 미간이 찌푸려진다.",
+      "expressions": {
+        "idle":    "🙂",
+        "talking": "😊",
+        "correct": "😌",
+        "wrong":   "🥶"
+      }
+    }
   },
   "vocabulary": [
     { "vocab_id": "n4_053", "jp": "方法", "reading": "ほうほう", "ko": "방법" },

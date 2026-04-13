@@ -7,7 +7,21 @@
     "setting_jp": "コンビニ",
     "difficulty": "N5",
     "thumbnail": "🏪",
-    "description": "편의점 점원과 기본 대화를 연습해봐요"
+    "description": "편의점 점원과 기본 대화를 연습해봐요",
+    "character": {
+      "id": "taro",
+      "name": "타로",
+      "name_jp": "太郎",
+      "role": "편의점 알바생",
+      "role_jp": "コンビニバイト",
+      "personality": "평소엔 수줍은 듯 해맑은 알바생. 하지만 어색한 말을 들으면 눈빛이 돌변한다.",
+      "expressions": {
+        "idle":    "🙂",
+        "talking": "😄",
+        "correct": "🤩",
+        "wrong":   "😤"
+      }
+    }
   },
   "vocabulary": [
     { "vocab_id": "n5_023", "jp": "持つ", "reading": "もつ", "ko": "들다, 가지다" }

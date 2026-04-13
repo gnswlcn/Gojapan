@@ -27,6 +27,39 @@
 | `difficulty` | string | `"N5"` \| `"N4"` \| `"N3"` \| `"N2"` \| `"N1"` |
 | `thumbnail` | string | 이모지 1개 |
 | `description` | string | 목록 화면 표시용 한 줄 설명 |
+| `character` | object | 에피소드 전담 캐릭터 (아래 참고) |
+
+**character 객체**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | string | 캐릭터 고유 ID (소문자 영문) |
+| `name` | string | 한국어 이름 |
+| `name_jp` | string | 일본어 이름 |
+| `role` | string | 직책 (한국어) |
+| `role_jp` | string | 직책 (일본어) |
+| `personality` | string | 캐릭터 성격 설명 — 오답 반응 뉘앙스 포함 |
+| `expressions.idle` | string | 기본 대기 표정 (이모지) |
+| `expressions.talking` | string | 말하는 중 표정 |
+| `expressions.correct` | string | 정답 선택 시 표정 |
+| `expressions.wrong` | string | 오답 선택 시 표정 |
+
+```json
+"character": {
+  "id": "taro",
+  "name": "타로",
+  "name_jp": "太郎",
+  "role": "편의점 알바생",
+  "role_jp": "コンビニバイト",
+  "personality": "평소엔 수줍은 듯 해맑은 알바생. 하지만 어색한 말을 들으면 눈빛이 돌변한다.",
+  "expressions": {
+    "idle":    "🙂",
+    "talking": "😄",
+    "correct": "🤩",
+    "wrong":   "😤"
+  }
+}
+```
 
 ### 1-2. vocabulary
 
