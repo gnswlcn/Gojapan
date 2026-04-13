@@ -9,7 +9,7 @@ import ep003 from '@/data/shadow_ep003.json';
 import ep004 from '@/data/shadow_ep004.json';
 import { useProgressStore } from '@/store/useProgressStore';
 
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+const BASE_PATH = '/Gojapan';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
