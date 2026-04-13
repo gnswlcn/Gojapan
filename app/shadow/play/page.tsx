@@ -168,7 +168,6 @@ function PlayContent() {
   const [turnIdx, setTurnIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>('tts');
   const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string; jp_ruby?: string } | null>(null);
-  const [showReading, setShowReading] = useState(true);
 
   // ── Vocab queue ─────────────────────────────────────────────────────────
   const [vocabQueue, setVocabQueue] = useState<NormalizedVocab[]>([]);
@@ -445,10 +444,7 @@ function PlayContent() {
               ))}
             </div>
 
-            <button onClick={() => setShowReading((v) => !v)}
-              className="text-xs text-gray-500 hover:text-gray-300">
-              {showReading ? '발음 숨기기' : '발음 보기'}
-            </button>
+            <div className="w-16" />
           </div>
 
           {/* Progress bar */}
@@ -494,9 +490,6 @@ function PlayContent() {
                   ? <RubyText text={currentTurn.jp_ruby} />
                   : currentTurn.jp}
               </div>
-              {showReading && (
-                <div className="text-indigo-300/60 text-sm mt-1">{currentTurn.reading}</div>
-              )}
               <div className="text-gray-400 text-sm mt-1">{currentTurn.ko_meaning}</div>
               <button onClick={() => speak(currentTurn.jp)}
                 className="mt-2 text-xs text-indigo-400/50 hover:text-indigo-300 transition-colors">
@@ -600,9 +593,6 @@ function PlayContent() {
                       ? <RubyText text={choice.jp_ruby} />
                       : choice.jp}
                   </div>
-                  {showReading && (
-                    <div className="text-gray-400 text-sm mt-0.5">{choice.reading}</div>
-                  )}
                 </button>
               ))}
             </motion.div>
@@ -630,11 +620,6 @@ function PlayContent() {
                     ? <RubyText text={chosenJp.jp_ruby} />
                     : chosenJp.jp}
                 </div>
-                {showReading && (
-                  <div className={`text-sm mt-1.5 ${currentTurn.type === 'choice' ? 'text-emerald-300/50' : 'text-gray-500'}`}>
-                    {chosenJp.reading}
-                  </div>
-                )}
                 <button onClick={() => speak(chosenJp.jp)}
                   className={`mt-3 text-xs underline underline-offset-2 transition-colors ${
                     currentTurn.type === 'choice' ? 'text-emerald-400/60 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'
