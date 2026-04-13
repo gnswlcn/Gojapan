@@ -17,7 +17,7 @@
 | ✅ 완료 | ep004 호텔 수건 추가 요청 (`data/shadow_ep004.json`) |
 | ✅ 완료 | 전 에피소드 `jp_ruby` 후리가나 필드 추가 |
 | ✅ 완료 | CONTENT_SPEC.md 작성 |
-| ⏳ 예정 | ep001~004 `vocabulary` + `vocab_ids` 태깅 |
+| ✅ 완료 | ep001~004 `vocabulary` + `vocab_ids` 태깅 |
 | ⏳ 예정 | N5 카페 주문 에피소드 (ep005) |
 
 ### 앱 에이전트 (브랜치: `claude/jlpt-word-learning-app-caE4L`)

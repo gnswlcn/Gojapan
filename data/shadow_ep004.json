@@ -9,6 +9,11 @@
     "thumbnail": "🏨",
     "description": "프런트에 전화해서 수건을 추가 요청해봐요. 조수사 '枚'도 놓치지 마세요!"
   },
+  "vocabulary": [
+    { "vocab_id": "n5_081", "jp": "部屋", "reading": "へや", "ko": "방" },
+    { "vocab_id": "n5_023", "jp": "持つ", "reading": "もつ", "ko": "들다, 가지다" },
+    { "vocab_id": "n4_038", "jp": "用意する", "reading": "ようしする", "ko": "준비하다" }
+  ],
   "dialogue_flow": [
     {
       "id": "t01",
@@ -27,6 +32,7 @@
       "reading": "どのような ごようけんでしょうか？",
       "ko_meaning": "어떻게 도와드릴까요?",
       "type": "choice",
+      "vocab_ids": [],
       "choices": [
         {
           "id": "a",
@@ -54,6 +60,7 @@
       "reading": "かしこまりました。なんまい ごようい すれば よろしいでしょうか？",
       "ko_meaning": "알겠습니다. 몇 장 준비해 드릴까요?",
       "type": "choice",
+      "vocab_ids": ["n4_038"],
       "choices": [
         {
           "id": "a",
@@ -81,6 +88,7 @@
       "reading": "おへやばんごうを おうかがいして よろしいでしょうか？",
       "ko_meaning": "객실 번호를 여쭤봐도 될까요?",
       "type": "choice",
+      "vocab_ids": ["n5_081"],
       "choices": [
         {
           "id": "a",
@@ -108,6 +116,7 @@
       "reading": "かしこまりました。まもなく おへやに おもちします。ごふべんを おかけして もうしわけございません。",
       "ko_meaning": "알겠습니다. 곧 객실로 가져다 드리겠습니다. 불편을 드려 죄송합니다.",
       "type": "choice",
+      "vocab_ids": ["n5_081", "n5_023"],
       "choices": [
         {
           "id": "a",

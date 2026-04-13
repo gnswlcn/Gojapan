@@ -9,6 +9,9 @@
     "thumbnail": "🏪",
     "description": "편의점 점원과 기본 대화를 연습해봐요"
   },
+  "vocabulary": [
+    { "vocab_id": "n5_023", "jp": "持つ", "reading": "もつ", "ko": "들다, 가지다" }
+  ],
   "dialogue_flow": [
     {
       "id": "t01",
@@ -27,6 +30,7 @@
       "reading": "ふくろはごりようですか？",
       "ko_meaning": "봉투는 필요하신가요?",
       "type": "choice",
+      "vocab_ids": [],
       "choices": [
         {
           "id": "a",
@@ -54,6 +58,7 @@
       "reading": "こちら、あたためますか？",
       "ko_meaning": "이거 데워드릴까요?",
       "type": "choice",
+      "vocab_ids": [],
       "choices": [
         {
           "id": "a",
@@ -90,6 +95,7 @@
       "reading": "ポイントカードはおもちですか？",
       "ko_meaning": "포인트 카드 있으신가요?",
       "type": "choice",
+      "vocab_ids": ["n5_023"],
       "choices": [
         {
           "id": "a",
