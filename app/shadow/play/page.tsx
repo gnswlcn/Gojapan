@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ep001 from '@/data/shadow_ep001.json';
@@ -41,20 +41,56 @@ const EPISODES: Record<string, EpisodeData> = {
   ep001: ep001 as EpisodeData,
 };
 
-// ─── TTS helper ──────────────────────────────────────────────────────────────
+// ─── TTS helpers ─────────────────────────────────────────────────────────────
 
-function speak(text: string, onEnd?: () => void): void {
+function stopTTS() {
+  if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+}
+
+/** Play text and call onDone when finished (or on error / timeout). Returns cleanup fn. */
+function speakWithFallback(text: string, onDone: () => void): () => void {
+  if (typeof window === 'undefined') {
+    const t = setTimeout(onDone, 400);
+    return () => clearTimeout(t);
+  }
+
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'ja-JP';
+  utt.rate = 0.85;
+
+  // Max wait: roughly chars × 120ms, clamped 1.5 s–4 s
+  const maxWait = Math.min(4000, Math.max(1500, text.length * 120));
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(fallback);
+    onDone();
+  };
+
+  const fallback = setTimeout(finish, maxWait);
+  utt.onend = finish;
+  utt.onerror = finish; // fires when no Japanese voice is installed
+
+  window.speechSynthesis.speak(utt);
+
+  return () => {
+    finished = true;
+    clearTimeout(fallback);
+    stopTTS();
+  };
+}
+
+/** One-shot playback with no callback (for "다시 듣기" buttons). */
+function speak(text: string): void {
   if (typeof window === 'undefined') return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   utt.lang = 'ja-JP';
   utt.rate = 0.85;
-  if (onEnd) utt.onend = onEnd;
   window.speechSynthesis.speak(utt);
-}
-
-function stopTTS() {
-  if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 }
 
 // ─── Phase type ──────────────────────────────────────────────────────────────
@@ -79,35 +115,36 @@ function PlayContent() {
   const [wrongId, setWrongId] = useState<string | null>(null);
   const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string } | null>(null);
   const [showReading, setShowReading] = useState(true);
-  const didAutoPlay = useRef(false);
 
   const currentTurn = turns[turnIdx] as Turn;
   const isLast = turnIdx === turns.length - 1;
 
-  // Auto-play clerk TTS at the start of each turn
+  // Auto-play clerk TTS at the start of each turn.
+  // speakWithFallback guarantees the phase advances even when Japanese TTS is
+  // unavailable (onerror) or onend never fires (browser bug / missing voice).
   useEffect(() => {
-    didAutoPlay.current = false;
     setPhase('tts');
     setWrongId(null);
     setChosenJp(null);
 
-    // Small delay so AnimatePresence has time to swap the bubble
+    const advance = () => {
+      if (currentTurn.type === 'listen') {
+        setChosenJp({ jp: currentTurn.jp, reading: currentTurn.reading });
+        setPhase('shadow');
+      } else {
+        setPhase('choosing');
+      }
+    };
+
+    // Small delay so AnimatePresence can swap the bubble before audio starts
+    let cleanup: (() => void) | undefined;
     const t = setTimeout(() => {
-      didAutoPlay.current = true;
-      speak(currentTurn.jp, () => {
-        if (currentTurn.type === 'listen') {
-          // For listen turns the "shadow" panel = repeat the clerk's line
-          setChosenJp({ jp: currentTurn.jp, reading: currentTurn.reading });
-          setPhase('shadow');
-        } else {
-          setPhase('choosing');
-        }
-      });
+      cleanup = speakWithFallback(currentTurn.jp, advance);
     }, 300);
 
     return () => {
       clearTimeout(t);
-      stopTTS();
+      cleanup?.();
     };
   }, [turnIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
