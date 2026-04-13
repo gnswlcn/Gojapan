@@ -51,6 +51,7 @@ interface Choice {
   jp: string;
   jp_ruby?: string;
   reading: string;
+  ko?: string;
   correct: boolean;
 }
 
@@ -167,7 +168,8 @@ function PlayContent() {
   const [sessionKey, setSessionKey] = useState(0);
   const [turnIdx, setTurnIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>('tts');
-  const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string; jp_ruby?: string } | null>(null);
+  const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string; jp_ruby?: string; ko?: string } | null>(null);
+  const [wrongChoice, setWrongChoice] = useState<Choice | null>(null);
 
   // ── Vocab queue ─────────────────────────────────────────────────────────
   const [vocabQueue, setVocabQueue] = useState<NormalizedVocab[]>([]);
@@ -238,6 +240,7 @@ function PlayContent() {
     setIsDead(false);
     setAttackMsg('');
     setVocabLearned(0);
+    setWrongChoice(null);
     setTurnIdx(0);
     setSessionKey((k) => k + 1);
   }, []);
@@ -261,10 +264,12 @@ function PlayContent() {
       if (npcMood === 'attacking') return;
 
       if (choice.correct) {
-        setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby });
+        setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby, ko: choice.ko });
+        setWrongChoice(null);
         setPhase('shadow');
         speak(choice.jp);
       } else {
+        setWrongChoice(choice);
         const newHp = hp - 1;
         setHp(newHp);
         const msg = npc.attack_messages[Math.floor(Math.random() * npc.attack_messages.length)];
@@ -284,6 +289,7 @@ function PlayContent() {
 
   // ── Next turn ────────────────────────────────────────────────────────────
   const handleNext = useCallback(() => {
+    setWrongChoice(null);
     if (isLast) {
       markEpisodeComplete(episode.episode_info.id);
       recordDailyStudy(turns.length, vocabLearned);
@@ -361,7 +367,16 @@ function PlayContent() {
               <div className="text-red-400 text-lg font-black leading-snug mb-2">
                 {attackMsg}
               </div>
-              <div className="text-gray-500 text-sm">
+              {wrongChoice && (
+                <div className="mt-2 pt-2 border-t border-white/10 text-left">
+                  <div className="text-gray-500 text-xs mb-1">내가 말한 것:</div>
+                  <div className="text-white/70 text-sm font-bold">{wrongChoice.jp}</div>
+                  {wrongChoice.ko && (
+                    <div className="text-orange-400/90 text-sm mt-0.5">→ {wrongChoice.ko}</div>
+                  )}
+                </div>
+              )}
+              <div className="text-gray-500 text-sm mt-2">
                 HP {Array.from({ length: MAX_HP }, (_, i) => (
                   <span key={i} style={{ filter: i >= hp ? 'grayscale(1) opacity(0.25)' : 'none' }}>❤️</span>
                 ))}
@@ -577,24 +592,33 @@ function PlayContent() {
                 맞는 일본어를 골라보세요
               </div>
 
-              {currentTurn.choices.map((choice) => (
-                <button
-                  key={choice.id}
-                  disabled={npcMood === 'attacking'}
-                  onClick={() => handleChoice(choice)}
-                  className={`w-full py-4 px-5 rounded-2xl text-left
-                    active:scale-95 transition-all duration-100 disabled:pointer-events-none
-                    bg-white/8 border-2 border-white/10 hover:bg-white/12
-                    ${npcMood === 'attacking' ? 'opacity-40' : ''}
-                  `}
-                >
-                  <div className="text-white font-bold text-lg leading-snug">
-                    {choice.jp_ruby
-                      ? <RubyText text={choice.jp_ruby} />
-                      : choice.jp}
-                  </div>
-                </button>
-              ))}
+              {currentTurn.choices.map((choice) => {
+                const isWrong = wrongChoice?.id === choice.id;
+                return (
+                  <button
+                    key={choice.id}
+                    disabled={npcMood === 'attacking'}
+                    onClick={() => handleChoice(choice)}
+                    className={`w-full py-4 px-5 rounded-2xl text-left
+                      active:scale-95 transition-all duration-100 disabled:pointer-events-none
+                      border-2
+                      ${isWrong
+                        ? 'bg-red-950/30 border-red-500/40'
+                        : 'bg-white/8 border-white/10 hover:bg-white/12'}
+                      ${npcMood === 'attacking' ? 'opacity-40' : ''}
+                    `}
+                  >
+                    <div className="text-white font-bold text-lg leading-snug">
+                      {choice.jp_ruby
+                        ? <RubyText text={choice.jp_ruby} />
+                        : choice.jp}
+                    </div>
+                    {isWrong && choice.ko && (
+                      <div className="text-red-400/80 text-sm mt-1">→ {choice.ko}</div>
+                    )}
+                  </button>
+                );
+              })}
             </motion.div>
           )}
 
@@ -620,6 +644,11 @@ function PlayContent() {
                     ? <RubyText text={chosenJp.jp_ruby} />
                     : chosenJp.jp}
                 </div>
+                {chosenJp.ko && (
+                  <div className={`text-sm mt-1.5 ${currentTurn.type === 'choice' ? 'text-emerald-300/60' : 'text-gray-400/70'}`}>
+                    {chosenJp.ko}
+                  </div>
+                )}
                 <button onClick={() => speak(chosenJp.jp)}
                   className={`mt-3 text-xs underline underline-offset-2 transition-colors ${
                     currentTurn.type === 'choice' ? 'text-emerald-400/60 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'
