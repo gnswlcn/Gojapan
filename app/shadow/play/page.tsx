@@ -13,6 +13,7 @@ import { useProgressStore } from '@/store/useProgressStore';
 
 interface NpcConfig {
   name: string;
+  image?: string;          // optional character image path (e.g. /characters/ep001.png)
   friendly_emoji: string;
   attack_emoji: string;
   weapon_emoji: string;
@@ -82,6 +83,52 @@ const EPISODES: Record<string, EpisodeData> = {
   ep003: ep003 as EpisodeData,
   ep004: ep004 as EpisodeData,
 };
+
+// ─── NPC avatar ──────────────────────────────────────────────────────────────
+
+interface NpcAvatarProps {
+  npc: NpcConfig;
+  mood: 'friendly' | 'attacking';
+}
+
+function NpcAvatar({ npc, mood }: NpcAvatarProps) {
+  const shakeAnim = mood === 'attacking'
+    ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.1, 1, 1.1, 1] }
+    : { scale: 1, x: 0 };
+
+  if (npc.image) {
+    return (
+      <motion.div
+        animate={shakeAnim}
+        transition={{ duration: 0.5 }}
+        className="relative shrink-0 w-20"
+      >
+        {/* character portrait */}
+        <img
+          src={npc.image}
+          alt={npc.name}
+          className="w-20 h-28 object-cover object-top rounded-2xl border-2 border-indigo-800/40 select-none"
+          draggable={false}
+        />
+        {/* emotion badge */}
+        <span className="absolute -bottom-1 -right-1 text-xl leading-none">
+          {mood === 'attacking' ? npc.attack_emoji : npc.friendly_emoji}
+        </span>
+      </motion.div>
+    );
+  }
+
+  // fallback: emoji circle
+  return (
+    <motion.div
+      animate={shakeAnim}
+      transition={{ duration: 0.5 }}
+      className="w-12 h-12 rounded-full bg-indigo-950 border-2 border-indigo-800/60 flex items-center justify-center text-2xl shrink-0 select-none"
+    >
+      {mood === 'attacking' ? npc.attack_emoji : npc.friendly_emoji}
+    </motion.div>
+  );
+}
 
 // ─── Ruby text renderer ───────────────────────────────────────────────────────
 
@@ -489,19 +536,9 @@ function PlayContent() {
       </div>
 
       {/* ── NPC bubble ── */}
-      <div className="px-4 mt-6 max-w-sm mx-auto w-full">
+      <div className="px-4 mt-4 max-w-sm mx-auto w-full">
         <div className="flex gap-3 items-start">
-
-          {/* NPC avatar — reacts to mood */}
-          <motion.div
-            animate={npcMood === 'attacking'
-              ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.35, 1, 1.35, 1] }
-              : { scale: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="w-12 h-12 rounded-full bg-indigo-950 border-2 border-indigo-800/60 flex items-center justify-center text-2xl shrink-0 select-none"
-          >
-            {npcMood === 'attacking' ? npc.attack_emoji : npc.friendly_emoji}
-          </motion.div>
+          <NpcAvatar npc={npc} mood={npcMood} />
 
           {/* Speech bubble */}
           <AnimatePresence mode="wait">
@@ -532,10 +569,8 @@ function PlayContent() {
         </div>
       </div>
 
-      <div className="flex-1" />
-
       {/* ── Bottom panel ── */}
-      <div className="px-4 pb-10 max-w-sm mx-auto w-full">
+      <div className="px-4 pt-4 pb-10 max-w-sm mx-auto w-full">
         <AnimatePresence mode="wait">
 
           {/* TTS indicator */}
