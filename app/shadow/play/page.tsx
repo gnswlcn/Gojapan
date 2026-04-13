@@ -179,6 +179,7 @@ function PlayContent() {
   const [hp, setHp] = useState(MAX_HP);
   const [npcMood, setNpcMood] = useState<NpcMood>('friendly');
   const [attackMsg, setAttackMsg] = useState('');
+  const [attackPending, setAttackPending] = useState(false); // popup stays until user confirms
   const [isDead, setIsDead] = useState(false);
   const attackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -237,6 +238,7 @@ function PlayContent() {
     if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
     setHp(MAX_HP);
     setNpcMood('friendly');
+    setAttackPending(false);
     setIsDead(false);
     setAttackMsg('');
     setVocabLearned(0);
@@ -258,10 +260,16 @@ function PlayContent() {
     [vocabQueue, afterVocabPhase, increaseConfidence, decreaseConfidence]
   );
 
+  // ── Confirm attack popup ─────────────────────────────────────────────────
+  const confirmAttack = useCallback(() => {
+    setAttackPending(false);
+    if (hp <= 0) setIsDead(true);
+  }, [hp]);
+
   // ── Choice handler (with attack logic) ───────────────────────────────────
   const handleChoice = useCallback(
     (choice: Choice) => {
-      if (npcMood === 'attacking') return;
+      if (npcMood === 'attacking' || attackPending) return;
 
       if (choice.correct) {
         setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby, ko: choice.ko });
@@ -275,16 +283,17 @@ function PlayContent() {
         const msg = npc.attack_messages[Math.floor(Math.random() * npc.attack_messages.length)];
         setAttackMsg(msg);
         setNpcMood('attacking');
+        setAttackPending(true);
         stopTTS();
 
         if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+        // Timer only ends the flash/shake animation — popup stays until confirmed
         attackTimerRef.current = setTimeout(() => {
           setNpcMood('friendly');
-          if (newHp <= 0) setIsDead(true);
         }, 1600);
       }
     },
-    [hp, npc.attack_messages, npcMood]
+    [hp, npc.attack_messages, npcMood, attackPending]
   );
 
   // ── Next turn ────────────────────────────────────────────────────────────
@@ -351,16 +360,18 @@ function PlayContent() {
 
       {/* ── Attack message popup ── */}
       <AnimatePresence>
-        {npcMood === 'attacking' && attackMsg && (
+        {attackPending && attackMsg && (
           <motion.div
             key="attack-popup"
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none px-6"
+            className="fixed inset-0 z-50 flex items-center justify-center px-6"
           >
-            <div className="bg-gray-900 border border-red-500/40 rounded-3xl px-8 py-6 text-center shadow-2xl shadow-red-900/50">
+            {/* dim backdrop */}
+            <div className="absolute inset-0 bg-black/60" />
+            <div className="relative bg-gray-900 border border-red-500/40 rounded-3xl px-8 py-6 text-center shadow-2xl shadow-red-900/50 w-full max-w-xs">
               <div className="text-6xl mb-3">
                 {npc.attack_emoji}{npc.weapon_emoji}
               </div>
@@ -376,11 +387,17 @@ function PlayContent() {
                   )}
                 </div>
               )}
-              <div className="text-gray-500 text-sm mt-2">
+              <div className="text-gray-500 text-sm mt-3 mb-4">
                 HP {Array.from({ length: MAX_HP }, (_, i) => (
                   <span key={i} style={{ filter: i >= hp ? 'grayscale(1) opacity(0.25)' : 'none' }}>❤️</span>
                 ))}
               </div>
+              <button
+                onClick={confirmAttack}
+                className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-2xl active:scale-95 transition-all"
+              >
+                확인
+              </button>
             </div>
           </motion.div>
         )}
@@ -597,7 +614,7 @@ function PlayContent() {
                 return (
                   <button
                     key={choice.id}
-                    disabled={npcMood === 'attacking'}
+                    disabled={npcMood === 'attacking' || attackPending}
                     onClick={() => handleChoice(choice)}
                     className={`w-full py-4 px-5 rounded-2xl text-left
                       active:scale-95 transition-all duration-100 disabled:pointer-events-none
@@ -605,7 +622,7 @@ function PlayContent() {
                       ${isWrong
                         ? 'bg-red-950/30 border-red-500/40'
                         : 'bg-white/8 border-white/10 hover:bg-white/12'}
-                      ${npcMood === 'attacking' ? 'opacity-40' : ''}
+                      ${(npcMood === 'attacking' || attackPending) ? 'opacity-40' : ''}
                     `}
                   >
                     <div className="text-white font-bold text-lg leading-snug">
