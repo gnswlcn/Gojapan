@@ -8,23 +8,25 @@ import type { Word } from '@/store/useProgressStore';
 interface FlashCardProps {
   word: Word;
   onKnown: () => void;
+  onKnownWithExample: () => void;
   onLearning: () => void;
   cardIndex: number;
 }
 
-export default function FlashCard({ word, onKnown, onLearning, cardIndex }: FlashCardProps) {
-  // Keyboard shortcuts
+export default function FlashCard({ word, onKnown, onKnownWithExample, onLearning, cardIndex }: FlashCardProps) {
   const handleKnown = useCallback(onKnown, [onKnown]);
+  const handleKnownWithExample = useCallback(onKnownWithExample, [onKnownWithExample]);
   const handleLearning = useCallback(onLearning, [onLearning]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'd') handleKnown();
       if (e.key === 'ArrowLeft' || e.key === 'a') handleLearning();
+      if (e.key === 'ArrowUp' || e.key === 'w') handleKnownWithExample();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleKnown, handleLearning]);
+  }, [handleKnown, handleKnownWithExample, handleLearning]);
 
   return (
     <AnimatePresence mode="wait">
@@ -36,20 +38,8 @@ export default function FlashCard({ word, onKnown, onLearning, cardIndex }: Flas
         transition={{ duration: 0.08 }}
         className="relative w-full h-full flex flex-col"
       >
-        {/* Split tap zones - full height overlay */}
-        <button
-          aria-label="모름"
-          onClick={handleLearning}
-          className="absolute left-0 top-0 w-1/2 h-full z-10 opacity-0"
-        />
-        <button
-          aria-label="알았다"
-          onClick={handleKnown}
-          className="absolute right-0 top-0 w-1/2 h-full z-10 opacity-0"
-        />
-
         {/* Card content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 pointer-events-none select-none">
+        <div className="flex-1 flex flex-col items-center justify-center px-6 select-none">
 
           {/* Category chip */}
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
@@ -77,24 +67,40 @@ export default function FlashCard({ word, onKnown, onLearning, cardIndex }: Flas
           {/* Example sentence */}
           {word.example && (
             <div className="w-full max-w-xs bg-white/5 rounded-2xl px-4 py-3">
-              <ExampleSentence segments={word.example} currentWordId={word.id} />
+              <ExampleSentence
+                segments={word.example}
+                currentWordId={word.id}
+                currentWordKanji={word.kanji}
+              />
             </div>
           )}
         </div>
 
-        {/* Bottom tap zone hints */}
-        <div className="flex pointer-events-none mb-6 px-4 gap-3">
-          <div className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-lg text-center">
+        {/* Bottom buttons — 3개 */}
+        <div className="flex mb-6 px-4 gap-2">
+          <button
+            onClick={handleLearning}
+            className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-base active:scale-95 transition-all"
+          >
             ← 모름
-          </div>
-          <div className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-lg text-center">
-            알았다 →
-          </div>
+          </button>
+          <button
+            onClick={handleKnown}
+            className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-base active:scale-95 transition-all"
+          >
+            알았다
+          </button>
+          <button
+            onClick={handleKnownWithExample}
+            className="flex-1 py-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold text-base active:scale-95 transition-all"
+          >
+            예문도 →
+          </button>
         </div>
 
-        {/* Edge gradient hints on hover — decorative */}
-        <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-red-500/5 to-transparent pointer-events-none rounded-l-3xl" />
-        <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-emerald-500/5 to-transparent pointer-events-none rounded-r-3xl" />
+        {/* Edge gradients */}
+        <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-red-500/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-blue-500/5 to-transparent pointer-events-none" />
       </motion.div>
     </AnimatePresence>
   );
