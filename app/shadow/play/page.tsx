@@ -1,12 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ep001 from '@/data/shadow_ep001.json';
 import { useProgressStore } from '@/store/useProgressStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface NpcConfig {
+  name: string;
+  friendly_emoji: string;
+  attack_emoji: string;
+  weapon_emoji: string;
+  attack_messages: string[];
+}
 
 interface VocabWord {
   id: string;
@@ -36,11 +44,11 @@ interface Turn {
 
 interface EpisodeData {
   episode_info: { id: string; title: string; thumbnail: string };
+  npc: NpcConfig;
   vocabulary: VocabWord[];
   dialogue_flow: Turn[];
 }
 
-// ─── Episode registry (static imports — required for Next.js static export) ──
 const EPISODES: Record<string, EpisodeData> = {
   ep001: ep001 as EpisodeData,
 };
@@ -84,16 +92,14 @@ function speak(text: string) {
   window.speechSynthesis.speak(utt);
 }
 
-// ─── Phase ───────────────────────────────────────────────────────────────────
-// tts      → clerk TTS playing
-// vocab    → unknown vocabulary card(s) from this turn
-// choosing → answer choice buttons
-// shadow   → correct answer / listen → repeat phrase
-// done     → episode finished
+// ─── Phase / mood ─────────────────────────────────────────────────────────────
 
 type Phase = 'tts' | 'vocab' | 'choosing' | 'shadow' | 'done';
+type NpcMood = 'friendly' | 'attacking';
 
-// ─── Play content ─────────────────────────────────────────────────────────────
+const MAX_HP = 3;
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 function PlayContent() {
   const router = useRouter();
@@ -101,27 +107,36 @@ function PlayContent() {
   const epId = params.get('ep') ?? 'ep001';
   const episode = EPISODES[epId] ?? EPISODES['ep001'];
   const turns = episode.dialogue_flow;
+  const npc = episode.npc;
 
   const { wordProgress, increaseConfidence, decreaseConfidence, markEpisodeComplete, recordDailyStudy } =
     useProgressStore();
 
+  // ── Core state ──────────────────────────────────────────────────────────
+  const [sessionKey, setSessionKey] = useState(0); // forces restart
   const [turnIdx, setTurnIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>('tts');
-  const [wrongId, setWrongId] = useState<string | null>(null);
   const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string } | null>(null);
   const [showReading, setShowReading] = useState(true);
 
-  // Vocab card queue for current turn
+  // ── Vocab queue ─────────────────────────────────────────────────────────
   const [vocabQueue, setVocabQueue] = useState<VocabWord[]>([]);
   const [afterVocabPhase, setAfterVocabPhase] = useState<'choosing' | 'shadow'>('choosing');
 
-  // Session stats
+  // ── HP / NPC mood ────────────────────────────────────────────────────────
+  const [hp, setHp] = useState(MAX_HP);
+  const [npcMood, setNpcMood] = useState<NpcMood>('friendly');
+  const [attackMsg, setAttackMsg] = useState('');
+  const [isDead, setIsDead] = useState(false);
+  const attackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Stats ────────────────────────────────────────────────────────────────
   const [vocabLearned, setVocabLearned] = useState(0);
 
   const currentTurn = turns[turnIdx] as Turn;
   const isLast = turnIdx === turns.length - 1;
 
-  // ── Advance after TTS: collect unknown vocab for this turn ────────────────
+  // ── Advance after TTS ────────────────────────────────────────────────────
   const advanceAfterTTS = useCallback(
     (turn: Turn) => {
       const unknownVocab = (turn.vocab_ids ?? [])
@@ -130,10 +145,7 @@ function PlayContent() {
         .filter((v) => (wordProgress[v.id]?.confidence ?? 0) < 3);
 
       const target: 'choosing' | 'shadow' = turn.type === 'listen' ? 'shadow' : 'choosing';
-
-      if (turn.type === 'listen') {
-        setChosenJp({ jp: turn.jp, reading: turn.reading });
-      }
+      if (turn.type === 'listen') setChosenJp({ jp: turn.jp, reading: turn.reading });
 
       if (unknownVocab.length > 0) {
         setVocabQueue(unknownVocab);
@@ -146,10 +158,9 @@ function PlayContent() {
     [episode.vocabulary, wordProgress]
   );
 
-  // ── TTS auto-play on turn change ──────────────────────────────────────────
+  // ── TTS auto-play ────────────────────────────────────────────────────────
   useEffect(() => {
     setPhase('tts');
-    setWrongId(null);
     setChosenJp(null);
     setVocabQueue([]);
 
@@ -159,39 +170,67 @@ function PlayContent() {
     }, 300);
 
     return () => { clearTimeout(t); cleanup?.(); };
-  }, [turnIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [turnIdx, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => stopTTS(), []);
-
-  // ── Vocab card handlers ───────────────────────────────────────────────────
-  const handleVocabKnown = useCallback(() => {
-    increaseConfidence(vocabQueue[0].id);
-    setVocabLearned((n) => n + 1);
-    const rest = vocabQueue.slice(1);
-    if (rest.length === 0) setPhase(afterVocabPhase);
-    else setVocabQueue(rest);
-  }, [vocabQueue, afterVocabPhase, increaseConfidence]);
-
-  const handleVocabLearning = useCallback(() => {
-    decreaseConfidence(vocabQueue[0].id);
-    const rest = vocabQueue.slice(1);
-    if (rest.length === 0) setPhase(afterVocabPhase);
-    else setVocabQueue(rest);
-  }, [vocabQueue, afterVocabPhase, decreaseConfidence]);
-
-  // ── Choice handlers ───────────────────────────────────────────────────────
-  const handleChoice = useCallback((choice: Choice) => {
-    if (choice.correct) {
-      setChosenJp({ jp: choice.jp, reading: choice.reading });
-      setPhase('shadow');
-      speak(choice.jp);
-    } else {
-      setWrongId(choice.id);
-      setTimeout(() => setWrongId(null), 500);
-    }
+  useEffect(() => () => {
+    stopTTS();
+    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
   }, []);
 
-  // ── Next turn / complete ──────────────────────────────────────────────────
+  // ── Restart ──────────────────────────────────────────────────────────────
+  const restart = useCallback(() => {
+    if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+    setHp(MAX_HP);
+    setNpcMood('friendly');
+    setIsDead(false);
+    setAttackMsg('');
+    setVocabLearned(0);
+    setTurnIdx(0);
+    setSessionKey((k) => k + 1);
+  }, []);
+
+  // ── Vocab handlers ───────────────────────────────────────────────────────
+  const dismissVocab = useCallback(
+    (known: boolean) => {
+      const word = vocabQueue[0];
+      if (known) { increaseConfidence(word.id); setVocabLearned((n) => n + 1); }
+      else decreaseConfidence(word.id);
+      const rest = vocabQueue.slice(1);
+      if (rest.length === 0) setPhase(afterVocabPhase);
+      else setVocabQueue(rest);
+    },
+    [vocabQueue, afterVocabPhase, increaseConfidence, decreaseConfidence]
+  );
+
+  // ── Choice handler (with attack logic) ───────────────────────────────────
+  const handleChoice = useCallback(
+    (choice: Choice) => {
+      if (npcMood === 'attacking') return; // block during animation
+
+      if (choice.correct) {
+        setChosenJp({ jp: choice.jp, reading: choice.reading });
+        setPhase('shadow');
+        speak(choice.jp);
+      } else {
+        // ── ATTACK ──
+        const newHp = hp - 1;
+        setHp(newHp);
+        const msg = npc.attack_messages[Math.floor(Math.random() * npc.attack_messages.length)];
+        setAttackMsg(msg);
+        setNpcMood('attacking');
+        stopTTS();
+
+        if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
+        attackTimerRef.current = setTimeout(() => {
+          setNpcMood('friendly');
+          if (newHp <= 0) setIsDead(true);
+        }, 1600);
+      }
+    },
+    [hp, npc.attack_messages, npcMood]
+  );
+
+  // ── Next turn ────────────────────────────────────────────────────────────
   const handleNext = useCallback(() => {
     if (isLast) {
       markEpisodeComplete(episode.episode_info.id);
@@ -202,40 +241,28 @@ function PlayContent() {
     }
   }, [isLast, episode.episode_info.id, turns.length, vocabLearned, markEpisodeComplete, recordDailyStudy]);
 
-  // ── Complete screen ───────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // ── Done screen ──────────────────────────────────────────────────────────
   if (phase === 'done') {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-6 px-6 text-center">
-        <motion.div
-          initial={{ scale: 0.4, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 14 }}
-          className="text-7xl"
-        >
-          🎉
-        </motion.div>
+        <motion.div initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 14 }} className="text-7xl">🎉</motion.div>
         <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15 }}>
           <div className="text-white text-2xl font-black mb-2">에피소드 클리어!</div>
           <div className="text-gray-400 text-sm">
-            이번 에피소드에서 <span className="text-indigo-300 font-bold">{vocabLearned}개</span> 단어를 배웠어요
+            단어 <span className="text-indigo-300 font-bold">{vocabLearned}개</span> 획득 ·
+            잔여 HP <span className="text-red-400 font-bold">{'❤️'.repeat(hp)}</span>
           </div>
         </motion.div>
-        <motion.div
-          initial={{ y: 16, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          className="flex flex-col gap-3 w-full max-w-xs"
-        >
-          <button
-            onClick={() => { setTurnIdx(0); setVocabLearned(0); setPhase('tts'); }}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl active:scale-95 transition-all"
-          >
+        <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25 }} className="flex flex-col gap-3 w-full max-w-xs">
+          <button onClick={restart}
+            className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl active:scale-95 transition-all">
             한 번 더 🔁
           </button>
-          <button
-            onClick={() => router.push('/')}
-            className="w-full py-4 bg-white/10 hover:bg-white/20 text-white font-medium rounded-2xl active:scale-95 transition-all"
-          >
+          <button onClick={() => router.push('/')}
+            className="w-full py-4 bg-white/10 text-white rounded-2xl active:scale-95 transition-all">
             홈으로
           </button>
         </motion.div>
@@ -243,43 +270,156 @@ function PlayContent() {
     );
   }
 
-  // ── Main screen ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // ── Main screen ──────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
-      {/* Header */}
+
+      {/* ── Attack flash overlay ── */}
+      <AnimatePresence>
+        {npcMood === 'attacking' && (
+          <motion.div
+            key="flash"
+            initial={{ opacity: 0.5 }}
+            animate={{ opacity: [0.5, 0.25, 0.45, 0.1, 0] }}
+            transition={{ duration: 1.4 }}
+            className="fixed inset-0 bg-red-600 pointer-events-none z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Attack message popup ── */}
+      <AnimatePresence>
+        {npcMood === 'attacking' && attackMsg && (
+          <motion.div
+            key="attack-popup"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none px-6"
+          >
+            <div className="bg-gray-900 border border-red-500/40 rounded-3xl px-8 py-6 text-center shadow-2xl shadow-red-900/50">
+              <div className="text-6xl mb-3">
+                {npc.attack_emoji}{npc.weapon_emoji}
+              </div>
+              <div className="text-red-400 text-lg font-black leading-snug mb-2">
+                {attackMsg}
+              </div>
+              <div className="text-gray-500 text-sm">
+                HP {Array.from({ length: MAX_HP }, (_, i) => (
+                  <span key={i} style={{ filter: i >= hp ? 'grayscale(1) opacity(0.25)' : 'none' }}>❤️</span>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Death screen ── */}
+      <AnimatePresence>
+        {isDead && (
+          <motion.div
+            key="death"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-60 bg-gray-950 flex flex-col items-center justify-center px-6 text-center"
+          >
+            <motion.div
+              initial={{ scale: 0.2, rotate: -15 }}
+              animate={{ scale: 1, rotate: [0, -5, 5, -3, 0] }}
+              transition={{ type: 'spring', stiffness: 200, damping: 10, delay: 0.1 }}
+              className="text-8xl mb-2"
+            >
+              {npc.attack_emoji}
+            </motion.div>
+            <motion.div
+              initial={{ scale: 0.5 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.15 }}
+              className="text-6xl mb-6"
+            >
+              {npc.weapon_emoji}
+            </motion.div>
+
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.35 }}>
+              <div className="text-red-500 text-4xl font-black mb-2">사망!</div>
+              <div className="text-gray-400 text-base mb-1">
+                <span className="text-white font-bold">{npc.name}</span>에게 당했습니다...
+              </div>
+              <div className="text-gray-600 text-sm">대화를 더 조심하세요 🪦</div>
+            </motion.div>
+
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.55 }} className="flex flex-col gap-3 w-full max-w-xs mt-10">
+              <button onClick={restart}
+                className="w-full py-5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-2xl active:scale-95 transition-all">
+                다시 도전 🔁
+              </button>
+              <button onClick={() => router.push('/')}
+                className="w-full py-4 bg-white/10 text-white rounded-2xl active:scale-95 transition-all">
+                홈으로 도망치기
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Header ── */}
       <div className="px-4 pt-6 pb-3 flex-none">
         <div className="max-w-sm mx-auto">
           <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={() => { stopTTS(); router.push('/'); }}
-              className="text-gray-500 hover:text-gray-300 text-sm"
-            >
-              ← 홈
-            </button>
-            <div className="text-xs text-gray-500">{turnIdx + 1} / {turns.length}</div>
-            <button
-              onClick={() => setShowReading((v) => !v)}
-              className="text-xs text-gray-500 hover:text-gray-300"
-            >
+            <button onClick={() => { stopTTS(); router.push('/'); }}
+              className="text-gray-500 hover:text-gray-300 text-sm">← 홈</button>
+
+            {/* HP hearts */}
+            <div className="flex gap-1 text-lg">
+              {Array.from({ length: MAX_HP }, (_, i) => (
+                <motion.span
+                  key={i}
+                  animate={npcMood === 'attacking' && i === hp - 1
+                    ? { scale: [1, 1.5, 0.8, 1], opacity: [1, 1, 0.3, 0.3] }
+                    : {}}
+                  transition={{ duration: 0.5 }}
+                  style={{ filter: i >= hp ? 'grayscale(1) opacity(0.25)' : 'none' }}
+                >
+                  ❤️
+                </motion.span>
+              ))}
+            </div>
+
+            <button onClick={() => setShowReading((v) => !v)}
+              className="text-xs text-gray-500 hover:text-gray-300">
               {showReading ? '발음 숨기기' : '발음 보기'}
             </button>
           </div>
+
+          {/* Progress bar */}
           <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-indigo-500 rounded-full"
+            <motion.div className="h-full bg-indigo-500 rounded-full"
               animate={{ width: `${((turnIdx + 1) / turns.length) * 100}%` }}
-              transition={{ duration: 0.4 }}
-            />
+              transition={{ duration: 0.4 }} />
           </div>
         </div>
       </div>
 
-      {/* Clerk bubble */}
+      {/* ── NPC bubble ── */}
       <div className="px-4 mt-6 max-w-sm mx-auto w-full">
         <div className="flex gap-3 items-start">
-          <div className="w-11 h-11 rounded-full bg-indigo-950 border border-indigo-800 flex items-center justify-center text-xl shrink-0 select-none">
-            {episode.episode_info.thumbnail}
-          </div>
+
+          {/* NPC avatar — reacts to mood */}
+          <motion.div
+            animate={npcMood === 'attacking'
+              ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.35, 1, 1.35, 1] }
+              : { scale: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-12 h-12 rounded-full bg-indigo-950 border-2 border-indigo-800/60 flex items-center justify-center text-2xl shrink-0 select-none"
+          >
+            {npcMood === 'attacking' ? npc.attack_emoji : npc.friendly_emoji}
+          </motion.div>
+
+          {/* Speech bubble */}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentTurn.id}
@@ -287,7 +427,11 @@ function PlayContent() {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.15 }}
-              className="flex-1 bg-indigo-950/70 border border-indigo-800/40 rounded-2xl rounded-tl-sm px-4 py-3"
+              className={`flex-1 rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-300 ${
+                npcMood === 'attacking'
+                  ? 'bg-red-950/60 border-red-500/30'
+                  : 'bg-indigo-950/70 border-indigo-800/40'
+              }`}
             >
               <div className="text-white text-xl font-bold leading-snug tracking-wide">
                 {currentTurn.jp}
@@ -296,10 +440,8 @@ function PlayContent() {
                 <div className="text-indigo-300/60 text-sm mt-1">{currentTurn.reading}</div>
               )}
               <div className="text-gray-400 text-sm mt-1">{currentTurn.ko_meaning}</div>
-              <button
-                onClick={() => speak(currentTurn.jp)}
-                className="mt-2 text-xs text-indigo-400/50 hover:text-indigo-300 transition-colors"
-              >
+              <button onClick={() => speak(currentTurn.jp)}
+                className="mt-2 text-xs text-indigo-400/50 hover:text-indigo-300 transition-colors">
                 🔊 다시 듣기
               </button>
             </motion.div>
@@ -309,165 +451,111 @@ function PlayContent() {
 
       <div className="flex-1" />
 
-      {/* Bottom panel */}
+      {/* ── Bottom panel ── */}
       <div className="px-4 pb-10 max-w-sm mx-auto w-full">
         <AnimatePresence mode="wait">
 
           {/* TTS indicator */}
           {phase === 'tts' && (
-            <motion.div
-              key="tts"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex justify-center py-8"
-            >
+            <motion.div key="tts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex justify-center py-8">
               <div className="flex gap-1.5 items-center">
                 {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-indigo-400"
+                  <motion.div key={i} className="w-2 h-2 rounded-full bg-indigo-400"
                     animate={{ y: [0, -6, 0] }}
-                    transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.12 }}
-                  />
+                    transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.12 }} />
                 ))}
               </div>
             </motion.div>
           )}
 
-          {/* ── Vocab card ── */}
+          {/* Vocab card */}
           {phase === 'vocab' && vocabQueue.length > 0 && (
-            <motion.div
-              key={`vocab-${vocabQueue[0].id}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
-              className="flex flex-col gap-3"
-            >
-              {/* mini label */}
+            <motion.div key={`vocab-${vocabQueue[0].id}`}
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18 }}
+              className="flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs text-gray-500 px-1">
                 <span className="uppercase tracking-widest">이 단어 알아요?</span>
-                {vocabQueue.length > 1 && (
-                  <span className="text-gray-600">{vocabQueue.length}개 남음</span>
-                )}
+                {vocabQueue.length > 1 && <span className="text-gray-600">{vocabQueue.length}개 남음</span>}
               </div>
-
-              {/* Card */}
               <div className="bg-white/6 border border-white/10 rounded-3xl px-6 py-7 text-center">
-                <div className="text-6xl font-black text-white mb-2 tracking-tight">
-                  {vocabQueue[0].kanji}
-                </div>
+                <div className="text-6xl font-black text-white mb-2 tracking-tight">{vocabQueue[0].kanji}</div>
                 <div className="text-lg text-gray-400 mb-4">{vocabQueue[0].reading}</div>
                 <div className="w-10 h-px bg-white/10 mx-auto mb-4" />
                 <div className="text-2xl font-bold text-white">{vocabQueue[0].meaning_ko}</div>
               </div>
-
-              {/* Buttons */}
               <div className="flex gap-2">
-                <button
-                  onClick={handleVocabLearning}
-                  className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold active:scale-95 transition-all"
-                >
+                <button onClick={() => dismissVocab(false)}
+                  className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold active:scale-95 transition-all">
                   몰라요
                 </button>
-                <button
-                  onClick={handleVocabKnown}
-                  className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold active:scale-95 transition-all"
-                >
+                <button onClick={() => dismissVocab(true)}
+                  className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold active:scale-95 transition-all">
                   알아요 ✓
                 </button>
               </div>
             </motion.div>
           )}
 
-          {/* ── Choice buttons ── */}
+          {/* Choice buttons */}
           {phase === 'choosing' && currentTurn.choices && (
-            <motion.div
-              key="choices"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.18 }}
-              className="flex flex-col gap-3"
-            >
+            <motion.div key="choices"
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }}
+              className="flex flex-col gap-3">
               <div className="text-xs text-gray-500 text-center mb-1 uppercase tracking-widest">
                 뭐라고 대답할까요?
               </div>
               {currentTurn.choices.map((choice) => (
-                <motion.button
+                <button
                   key={choice.id}
-                  animate={wrongId === choice.id ? { x: [-8, 8, -6, 6, -4, 4, 0] } : {}}
-                  transition={{ duration: 0.35 }}
+                  disabled={npcMood === 'attacking'}
                   onClick={() => handleChoice(choice)}
-                  className={`
-                    w-full py-5 px-6 rounded-2xl font-bold text-lg text-left
-                    active:scale-95 transition-all duration-100
-                    ${wrongId === choice.id
-                      ? 'bg-red-500/15 border-2 border-red-500/50 text-red-400'
-                      : 'bg-white/8 border-2 border-white/10 text-white hover:bg-white/12'
-                    }
+                  className={`w-full py-5 px-6 rounded-2xl font-bold text-lg text-left
+                    active:scale-95 transition-all duration-100 disabled:pointer-events-none
+                    bg-white/8 border-2 border-white/10 text-white hover:bg-white/12
+                    ${npcMood === 'attacking' ? 'opacity-40' : ''}
                   `}
                 >
                   {choice.ko}
-                </motion.button>
+                </button>
               ))}
             </motion.div>
           )}
 
-          {/* ── Shadow panel ── */}
+          {/* Shadow panel */}
           {phase === 'shadow' && chosenJp && (
-            <motion.div
-              key="shadow"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex flex-col gap-4"
-            >
-              <div
-                className={`rounded-2xl px-5 py-4 text-center border ${
-                  currentTurn.type === 'choice'
-                    ? 'bg-emerald-900/30 border-emerald-500/25'
-                    : 'bg-white/5 border-white/10'
-                }`}
-              >
+            <motion.div key="shadow"
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+              className="flex flex-col gap-4">
+              <div className={`rounded-2xl px-5 py-4 text-center border ${
+                currentTurn.type === 'choice'
+                  ? 'bg-emerald-900/30 border-emerald-500/25'
+                  : 'bg-white/5 border-white/10'
+              }`}>
                 {currentTurn.type === 'choice' && (
-                  <div className="text-xs text-emerald-400 uppercase tracking-widest mb-3">
-                    ✓ 정답! 따라 말해보세요
-                  </div>
+                  <div className="text-xs text-emerald-400 uppercase tracking-widest mb-3">✓ 정답! 따라 말해보세요</div>
                 )}
                 {currentTurn.type === 'listen' && (
-                  <div className="text-xs text-gray-400 uppercase tracking-widest mb-3">
-                    따라 말해보세요
-                  </div>
+                  <div className="text-xs text-gray-400 uppercase tracking-widest mb-3">따라 말해보세요</div>
                 )}
-                <div className="text-white text-2xl font-bold leading-snug tracking-wide">
-                  {chosenJp.jp}
-                </div>
+                <div className="text-white text-2xl font-bold leading-snug tracking-wide">{chosenJp.jp}</div>
                 {showReading && (
-                  <div className={`text-sm mt-1.5 ${
-                    currentTurn.type === 'choice' ? 'text-emerald-300/50' : 'text-gray-500'
-                  }`}>
+                  <div className={`text-sm mt-1.5 ${currentTurn.type === 'choice' ? 'text-emerald-300/50' : 'text-gray-500'}`}>
                     {chosenJp.reading}
                   </div>
                 )}
-                <button
-                  onClick={() => speak(chosenJp.jp)}
+                <button onClick={() => speak(chosenJp.jp)}
                   className={`mt-3 text-xs underline underline-offset-2 transition-colors ${
-                    currentTurn.type === 'choice'
-                      ? 'text-emerald-400/60 hover:text-emerald-300'
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
+                    currentTurn.type === 'choice' ? 'text-emerald-400/60 hover:text-emerald-300' : 'text-gray-500 hover:text-gray-300'
+                  }`}>
                   🔊 다시 듣기
                 </button>
               </div>
-
-              <button
-                onClick={handleNext}
-                className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg rounded-2xl active:scale-95 transition-all shadow-lg shadow-indigo-900/40"
-              >
+              <button onClick={handleNext}
+                className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg rounded-2xl active:scale-95 transition-all shadow-lg shadow-indigo-900/40">
                 소리 내어 읽은 후 터치하세요 →
               </button>
             </motion.div>
@@ -480,9 +568,5 @@ function PlayContent() {
 }
 
 export default function PlayPage() {
-  return (
-    <Suspense>
-      <PlayContent />
-    </Suspense>
-  );
+  return <Suspense><PlayContent /></Suspense>;
 }

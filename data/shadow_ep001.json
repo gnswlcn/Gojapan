@@ -10,6 +10,19 @@
     "thumbnail": "🏪",
     "description": "편의점 점원과 기본 대화를 연습해봐요"
   },
+  "npc": {
+    "name": "편의점 알바생",
+    "friendly_emoji": "🙂",
+    "attack_emoji": "😤",
+    "weapon_emoji": "🔪",
+    "attack_messages": [
+      "커터칼로 영수증을 두 동강 냈다! 다음은 당신?",
+      "냉동 삼각김밥이 총알처럼 날아왔다!",
+      "바코드 스캐너를 이마에 겨눴다 — BEEP!",
+      "계산대 아래에서 야구방망이를 꺼내 들었다!",
+      "포인트 카드를 표창처럼 날카롭게 날렸다!"
+    ]
+  },
   "vocabulary": [
     { "id": "ep001_v01", "kanji": "袋", "reading": "ふくろ", "meaning_ko": "봉투" },
     { "id": "ep001_v02", "kanji": "ご利用", "reading": "ごりよう", "meaning_ko": "이용" },
