@@ -21,22 +21,26 @@ export interface Word {
   example?: ExampleSegment[];
 }
 
+export interface WordProgress {
+  confidence: number; // 0 = unseen, 1-2 = low, 3-4 = known, 5 = mastered
+  lastSeen: string;
+}
+
 export interface DailyStats {
   studied: number;
   known: number;
 }
 
 interface ProgressState {
-  knownWords: string[];
-  learningWords: string[];
+  wordProgress: Record<string, WordProgress>;
   currentWorld: JlptLevel;
   streak: number;
   lastStudiedDate: string;
   dailyStats: Record<string, DailyStats>;
 
   // Actions
-  markKnown: (wordId: string) => void;
-  markLearning: (wordId: string) => void;
+  increaseConfidence: (wordId: string, amount?: number) => void;
+  decreaseConfidence: (wordId: string) => void;
   recordDailyStudy: (studied: number, known: number) => void;
   setCurrentWorld: (level: JlptLevel) => void;
   resetProgress: () => void;
@@ -59,27 +63,35 @@ const updateStreak = (lastDate: string, currentStreak: number): number => {
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
-      knownWords: [],
-      learningWords: [],
+      wordProgress: {},
       currentWorld: 'N5',
       streak: 0,
       lastStudiedDate: '',
       dailyStats: {},
 
-      markKnown: (wordId: string) =>
-        set((state) => ({
-          knownWords: state.knownWords.includes(wordId)
-            ? state.knownWords
-            : [...state.knownWords, wordId],
-          learningWords: state.learningWords.filter((id) => id !== wordId),
-        })),
+      increaseConfidence: (wordId: string, amount = 1) =>
+        set((state) => {
+          const current = state.wordProgress[wordId];
+          const newConfidence = Math.min(5, (current?.confidence ?? 0) + amount);
+          return {
+            wordProgress: {
+              ...state.wordProgress,
+              [wordId]: { confidence: newConfidence, lastSeen: today() },
+            },
+          };
+        }),
 
-      markLearning: (wordId: string) =>
-        set((state) => ({
-          learningWords: state.learningWords.includes(wordId)
-            ? state.learningWords
-            : [...state.learningWords, wordId],
-        })),
+      decreaseConfidence: (wordId: string) =>
+        set((state) => {
+          const current = state.wordProgress[wordId];
+          const newConfidence = Math.max(0, (current?.confidence ?? 1) - 1);
+          return {
+            wordProgress: {
+              ...state.wordProgress,
+              [wordId]: { confidence: newConfidence, lastSeen: today() },
+            },
+          };
+        }),
 
       recordDailyStudy: (studied: number, known: number) => {
         const todayStr = today();
@@ -105,8 +117,7 @@ export const useProgressStore = create<ProgressState>()(
 
       resetProgress: () =>
         set({
-          knownWords: [],
-          learningWords: [],
+          wordProgress: {},
           currentWorld: 'N5',
           streak: 0,
           lastStudiedDate: '',

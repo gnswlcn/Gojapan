@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import FlashCard from '@/components/FlashCard';
@@ -11,7 +11,7 @@ import type { Word } from '@/store/useProgressStore';
 
 export default function LearnPage() {
   const router = useRouter();
-  const { currentWorld, knownWords, learningWords, markKnown, markLearning, recordDailyStudy } =
+  const { currentWorld, wordProgress, increaseConfidence, decreaseConfidence, recordDailyStudy } =
     useProgressStore();
 
   const [words, setWords] = useState<Word[]>([]);
@@ -25,11 +25,22 @@ export default function LearnPage() {
   useEffect(() => {
     (async () => {
       const all = await loadWords(currentWorld);
-      const dungeon = selectDungeonWords(all, knownWords, learningWords);
+      const dungeon = selectDungeonWords(all, wordProgress);
       setWords(dungeon);
       setLoading(false);
     })();
   }, [currentWorld]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Set of known word IDs (confidence >= 3) for example sentence highlighting
+  const knownWordIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(wordProgress)
+          .filter(([, v]) => v.confidence >= 3)
+          .map(([k]) => k)
+      ),
+    [wordProgress]
+  );
 
   const advance = useCallback(() => {
     setCardIndex((i) => {
@@ -43,29 +54,29 @@ export default function LearnPage() {
 
   const handleKnown = useCallback(() => {
     const word = words[cardIndex];
-    markKnown(word.id);
+    increaseConfidence(word.id);
     setSessionKnown((prev) => [...prev, word.id]);
     advance();
-  }, [words, cardIndex, markKnown, advance]);
+  }, [words, cardIndex, increaseConfidence, advance]);
 
   const handleKnownWithExample = useCallback(() => {
     const word = words[cardIndex];
-    markKnown(word.id);
-    // 예문 단어들도 함께 known 처리
+    increaseConfidence(word.id);
+    // 예문 단어들도 함께 confidence 증가
     if (word.example) {
       word.example.forEach((seg) => {
-        if (seg.wId && seg.wId !== word.id) markKnown(seg.wId);
+        if (seg.wId && seg.wId !== word.id) increaseConfidence(seg.wId);
       });
     }
     setSessionKnown((prev) => [...prev, word.id]);
     advance();
-  }, [words, cardIndex, markKnown, advance]);
+  }, [words, cardIndex, increaseConfidence, advance]);
 
   const handleLearning = useCallback(() => {
     const word = words[cardIndex];
-    markLearning(word.id);
+    decreaseConfidence(word.id);
     advance();
-  }, [words, cardIndex, markLearning, advance]);
+  }, [words, cardIndex, decreaseConfidence, advance]);
 
   useEffect(() => {
     if (done && words.length > 0) {
@@ -140,6 +151,7 @@ export default function LearnPage() {
             onKnownWithExample={handleKnownWithExample}
             onLearning={handleLearning}
             cardIndex={cardIndex}
+            knownWordIds={knownWordIds}
           />
         )}
       </div>

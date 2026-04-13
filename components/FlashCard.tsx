@@ -11,9 +11,17 @@ interface FlashCardProps {
   onKnownWithExample: () => void;
   onLearning: () => void;
   cardIndex: number;
+  knownWordIds: Set<string>;
 }
 
-export default function FlashCard({ word, onKnown, onKnownWithExample, onLearning, cardIndex }: FlashCardProps) {
+export default function FlashCard({
+  word,
+  onKnown,
+  onKnownWithExample,
+  onLearning,
+  cardIndex,
+  knownWordIds,
+}: FlashCardProps) {
   const handleKnown = useCallback(onKnown, [onKnown]);
   const handleKnownWithExample = useCallback(onKnownWithExample, [onKnownWithExample]);
   const handleLearning = useCallback(onLearning, [onLearning]);
@@ -71,12 +79,13 @@ export default function FlashCard({ word, onKnown, onKnownWithExample, onLearnin
                 segments={word.example}
                 currentWordId={word.id}
                 currentWordKanji={word.kanji}
+                knownWordIds={knownWordIds}
               />
             </div>
           )}
         </div>
 
-        {/* Bottom buttons — 3개 */}
+        {/* Bottom buttons */}
         <div className="flex mb-6 px-4 gap-2">
           <button
             onClick={handleLearning}

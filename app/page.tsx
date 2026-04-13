@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useProgressStore } from '@/store/useProgressStore';
 import { loadWords, getDungeonProgress, WORLD_CONFIG, LEVEL_ORDER } from '@/lib/wordSelector';
-import type { JlptLevel, Word } from '@/store/useProgressStore';
+import type { JlptLevel, Word, WordProgress } from '@/store/useProgressStore';
 
 const today = () => new Date().toISOString().split('T')[0];
 
 export default function HomePage() {
   const router = useRouter();
-  const { currentWorld, knownWords, streak, dailyStats, setCurrentWorld } = useProgressStore();
+  const { currentWorld, wordProgress, streak, dailyStats, setCurrentWorld } = useProgressStore();
   const [worldWords, setWorldWords] = useState<Record<JlptLevel, Word[]>>({} as Record<JlptLevel, Word[]>);
   const [loading, setLoading] = useState(true);
 
@@ -30,13 +30,16 @@ export default function HomePage() {
 
   const config = WORLD_CONFIG[currentWorld];
 
+  const getConf = (id: string) => wordProgress[id]?.confidence ?? 0;
+
   const isUnlocked = (level: JlptLevel): boolean => {
     const idx = LEVEL_ORDER.indexOf(level);
     if (idx === 0) return true;
     const prev = LEVEL_ORDER[idx - 1];
     const prevWords = worldWords[prev];
     if (!prevWords) return false;
-    const prevKnown = prevWords.filter((w) => knownWords.includes(w.id)).length;
+    // Unlock when 50% of previous world's words have confidence >= 3
+    const prevKnown = prevWords.filter((w) => getConf(w.id) >= 3).length;
     return prevKnown >= Math.ceil(prevWords.length * 0.5);
   };
 
@@ -101,7 +104,7 @@ export default function HomePage() {
             {!loading && worldWords[currentWorld] && (
               <WorldProgress
                 allWords={worldWords[currentWorld]}
-                knownWords={knownWords}
+                wordProgress={wordProgress}
               />
             )}
 
@@ -124,9 +127,9 @@ export default function HomePage() {
             const unlocked = loading ? idx === 0 : isUnlocked(level);
             const isActive = level === currentWorld;
             const words = worldWords[level];
-            const knownCount = words ? words.filter((w) => knownWords.includes(w.id)).length : 0;
+            const knownCount = words ? words.filter((w) => getConf(w.id) >= 3).length : 0;
             const totalCount = words?.length ?? 0;
-            const cleared = totalCount > 0 && knownCount === totalCount;
+            const cleared = totalCount > 0 && words.every((w) => getConf(w.id) >= 5);
 
             return (
               <motion.button
@@ -189,9 +192,15 @@ export default function HomePage() {
   );
 }
 
-function WorldProgress({ allWords, knownWords }: { allWords: Word[]; knownWords: string[] }) {
-  const { cleared, total } = getDungeonProgress(allWords, knownWords);
-  const knownCount = allWords.filter((w) => knownWords.includes(w.id)).length;
+function WorldProgress({
+  allWords,
+  wordProgress,
+}: {
+  allWords: Word[];
+  wordProgress: Record<string, WordProgress>;
+}) {
+  const { cleared, total } = getDungeonProgress(allWords, wordProgress);
+  const knownCount = allWords.filter((w) => (wordProgress[w.id]?.confidence ?? 0) >= 3).length;
   const pct = allWords.length > 0 ? Math.round((knownCount / allWords.length) * 100) : 0;
 
   return (

@@ -1,4 +1,4 @@
-import type { Word, JlptLevel } from '@/store/useProgressStore';
+import type { Word, JlptLevel, WordProgress } from '@/store/useProgressStore';
 import n5 from '@/data/n5.json';
 import n4 from '@/data/n4.json';
 import n3 from '@/data/n3.json';
@@ -31,38 +31,43 @@ export async function loadWords(level: JlptLevel): Promise<Word[]> {
 
 export function selectDungeonWords(
   allWords: Word[],
-  knownWords: string[],
-  learningWords: string[]
+  wordProgress: Record<string, WordProgress>
 ): Word[] {
-  const knownSet = new Set(knownWords);
-  const learningSet = new Set(learningWords);
+  const getConf = (id: string) => wordProgress[id]?.confidence ?? 0;
 
-  // Priority 1: Learning words (need review)
-  const learning = allWords.filter(
-    (w) => learningSet.has(w.id) && !knownSet.has(w.id)
-  );
-
-  // Priority 2: Unseen words (not known, not in learning)
-  const unseen = allWords.filter(
-    (w) => !knownSet.has(w.id) && !learningSet.has(w.id)
-  );
+  // unseen: never studied
+  const unseen = allWords.filter((w) => !wordProgress[w.id]);
+  // low confidence: studied but shaky (1-2)
+  const lowConf = allWords.filter((w) => {
+    const c = getConf(w.id);
+    return c >= 1 && c <= 2;
+  });
+  // medium confidence: knows it but needs occasional review (3-4)
+  const medConf = allWords.filter((w) => {
+    const c = getConf(w.id);
+    return c >= 3 && c <= 4;
+  });
+  // mastered (confidence 5) are excluded
 
   const selected: Word[] = [];
 
-  // Fill with learning words first (up to half the dungeon)
-  const learningSlots = Math.min(learning.length, Math.floor(DUNGEON_SIZE / 2));
-  selected.push(...shuffle(learning).slice(0, learningSlots));
+  // Priority 1: low confidence (needs review, up to half the dungeon)
+  const lowSlots = Math.min(lowConf.length, Math.floor(DUNGEON_SIZE / 2));
+  selected.push(...shuffle(lowConf).slice(0, lowSlots));
 
-  // Fill remaining with unseen words
-  const remaining = DUNGEON_SIZE - selected.length;
-  selected.push(...shuffle(unseen).slice(0, remaining));
+  // Priority 2: unseen words to fill remaining slots
+  const unseenNeeded = DUNGEON_SIZE - selected.length;
+  selected.push(...shuffle(unseen).slice(0, unseenNeeded));
 
-  // If still not enough, use more learning words
+  // Priority 3: more low confidence if still short
   if (selected.length < DUNGEON_SIZE) {
-    const morelearning = shuffle(learning)
-      .filter((w) => !selected.find((s) => s.id === w.id))
-      .slice(0, DUNGEON_SIZE - selected.length);
-    selected.push(...morelearning);
+    const moreLow = shuffle(lowConf).filter((w) => !selected.find((s) => s.id === w.id));
+    selected.push(...moreLow.slice(0, DUNGEON_SIZE - selected.length));
+  }
+
+  // Priority 4: medium confidence for review
+  if (selected.length < DUNGEON_SIZE) {
+    selected.push(...shuffle(medConf).slice(0, DUNGEON_SIZE - selected.length));
   }
 
   return shuffle(selected);
@@ -70,20 +75,20 @@ export function selectDungeonWords(
 
 export function getDungeonProgress(
   allWords: Word[],
-  knownWords: string[]
+  wordProgress: Record<string, WordProgress>
 ): { cleared: number; total: number } {
-  const knownSet = new Set(knownWords);
-  const levelWords = allWords;
-  const totalDungeons = Math.ceil(levelWords.length / DUNGEON_SIZE);
-  const knownInLevel = levelWords.filter((w) => knownSet.has(w.id)).length;
-  const clearedDungeons = Math.floor(knownInLevel / DUNGEON_SIZE);
-
+  const totalDungeons = Math.ceil(allWords.length / DUNGEON_SIZE);
+  // "Known" = confidence >= 3
+  const knownCount = allWords.filter((w) => (wordProgress[w.id]?.confidence ?? 0) >= 3).length;
+  const clearedDungeons = Math.floor(knownCount / DUNGEON_SIZE);
   return { cleared: clearedDungeons, total: totalDungeons };
 }
 
-export function isWorldCleared(allWords: Word[], knownWords: string[]): boolean {
-  const knownSet = new Set(knownWords);
-  return allWords.every((w) => knownSet.has(w.id));
+export function isWorldCleared(
+  allWords: Word[],
+  wordProgress: Record<string, WordProgress>
+): boolean {
+  return allWords.every((w) => (wordProgress[w.id]?.confidence ?? 0) >= 5);
 }
 
 export const WORLD_CONFIG: Record<
