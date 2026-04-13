@@ -7,8 +7,9 @@ import ep001 from '@/data/shadow_ep001.json';
 import ep002 from '@/data/shadow_ep002.json';
 import ep003 from '@/data/shadow_ep003.json';
 import ep004 from '@/data/shadow_ep004.json';
-import NextImage from 'next/image';
 import { useProgressStore } from '@/store/useProgressStore';
+
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -131,14 +132,13 @@ function NpcAvatar({ npc, mood }: NpcAvatarProps) {
         transition={{ duration: 0.5 }}
         className="shrink-0 w-24 rounded-2xl overflow-hidden shadow-lg shadow-black/40 bg-white"
       >
-        <NextImage
-          src={src}
+        <img
+          src={BASE_PATH + src}
           alt={npc.name}
           width={96}
           height={128}
-          className="object-contain object-top select-none"
+          className="w-24 h-32 object-contain object-top select-none"
           draggable={false}
-          unoptimized
         />
       </motion.div>
     );
