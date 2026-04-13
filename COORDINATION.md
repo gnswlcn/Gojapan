@@ -16,15 +16,19 @@
 | ✅ 완료 | 에피소드 완료 시 던전 클리어 처리 |
 | ✅ 완료 | wordProgress confidence 시스템 (0~5) |
 | ✅ 완료 | TTS 자동 재생 + fallback |
-| 🔜 대기 중 | ep002~ep003 등록 (콘텐츠 에이전트 작업 후) |
+| ✅ 완료 | jp_ruby `{漢字|よみ}` → `<ruby>` 렌더링 (RubyText 컴포넌트) |
+| ✅ 완료 | thought_ko 한국어 생각말풍선 지원 (situation 하위 호환 유지) |
+| ✅ 완료 | ep002~ep004 등록 (N4 월드) |
+| ✅ 완료 | vocab 포맷 통합 (id/kanji/meaning_ko ↔ vocab_id/jp/ko 양쪽 지원) |
 
 ### 콘텐츠 에이전트
 
 | 상태 | 항목 |
 |------|------|
 | ✅ 완료 | ep001 편의점에서 (N5, 6턴) |
-| 🚧 필요 | ep002 호텔 체크인 (N5) |
-| 🚧 필요 | ep003 식당 주문 (N5) |
+| ✅ 완료 | ep002 돈키호테 면세 카운터 (N4, 5턴) |
+| ✅ 완료 | ep003 식당 웨이팅 취소 (N4, 5턴) |
+| ✅ 완료 | ep004 호텔 수건 추가 요청 (N4, 5턴) |
 
 ---
 
@@ -34,9 +38,11 @@
 > 앱 에이전트가 `lib/episodes.ts`와 `app/shadow/play/page.tsx`에 등록합니다.
 
 ```
-<!-- 예시:
-- [ ] ep002 완성, data/shadow_ep002.json 추가함 → 앱에 등록 요청
--->
+- [x] ep002 완성, data/shadow_ep002.json 추가함 → 앱 등록 완료
+- [x] ep003 완성, data/shadow_ep003.json 추가함 → 앱 등록 완료
+- [x] ep004 완성, data/shadow_ep004.json 추가함 → 앱 등록 완료
+- [x] jp_ruby 렌더링 요청 → RubyText 컴포넌트로 구현 완료
+- [x] thought_ko 생각말풍선 요청 → 구현 완료 (situation 필드도 하위 호환)
 ```
 
 ---

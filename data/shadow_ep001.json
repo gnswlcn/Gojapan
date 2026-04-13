@@ -24,16 +24,66 @@
     ]
   },
   "vocabulary": [
-    { "id": "ep001_v01", "kanji": "袋", "reading": "ふくろ", "meaning_ko": "봉투" },
-    { "id": "ep001_v02", "kanji": "ご利用", "reading": "ごりよう", "meaning_ko": "이용" },
-    { "id": "ep001_v03", "kanji": "一枚", "reading": "いちまい", "meaning_ko": "한 장" },
-    { "id": "ep001_v04", "kanji": "大丈夫", "reading": "だいじょうぶ", "meaning_ko": "괜찮다" },
-    { "id": "ep001_v05", "kanji": "温める", "reading": "あたためる", "meaning_ko": "데우다" },
-    { "id": "ep001_v06", "kanji": "お願いします", "reading": "おねがいします", "meaning_ko": "부탁드려요" },
-    { "id": "ep001_v07", "kanji": "お会計", "reading": "おかいけい", "meaning_ko": "계산, 결제" },
-    { "id": "ep001_v08", "kanji": "五百円", "reading": "ごひゃくえん", "meaning_ko": "500엔" },
-    { "id": "ep001_v09", "kanji": "ポイントカード", "reading": "ポイントカード", "meaning_ko": "포인트 카드" },
-    { "id": "ep001_v10", "kanji": "お持ち", "reading": "おもち", "meaning_ko": "가지고 계신" }
+    {
+      "id": "ep001_v01",
+      "kanji": "袋",
+      "reading": "ふくろ",
+      "meaning_ko": "봉투"
+    },
+    {
+      "id": "ep001_v02",
+      "kanji": "ご利用",
+      "reading": "ごりよう",
+      "meaning_ko": "이용"
+    },
+    {
+      "id": "ep001_v03",
+      "kanji": "一枚",
+      "reading": "いちまい",
+      "meaning_ko": "한 장"
+    },
+    {
+      "id": "ep001_v04",
+      "kanji": "大丈夫",
+      "reading": "だいじょうぶ",
+      "meaning_ko": "괜찮다"
+    },
+    {
+      "id": "ep001_v05",
+      "kanji": "温める",
+      "reading": "あたためる",
+      "meaning_ko": "데우다"
+    },
+    {
+      "id": "ep001_v06",
+      "kanji": "お願いします",
+      "reading": "おねがいします",
+      "meaning_ko": "부탁드려요"
+    },
+    {
+      "id": "ep001_v07",
+      "kanji": "お会計",
+      "reading": "おかいけい",
+      "meaning_ko": "계산, 결제"
+    },
+    {
+      "id": "ep001_v08",
+      "kanji": "五百円",
+      "reading": "ごひゃくえん",
+      "meaning_ko": "500엔"
+    },
+    {
+      "id": "ep001_v09",
+      "kanji": "ポイントカード",
+      "reading": "ポイントカード",
+      "meaning_ko": "포인트 카드"
+    },
+    {
+      "id": "ep001_v10",
+      "kanji": "お持ち",
+      "reading": "おもち",
+      "meaning_ko": "가지고 계신"
+    }
   ],
   "dialogue_flow": [
     {
@@ -43,7 +93,8 @@
       "reading": "いらっしゃいませ！",
       "ko_meaning": "어서 오세요!",
       "type": "listen",
-      "vocab_ids": []
+      "vocab_ids": [],
+      "jp_ruby": "いらっしゃいませ！"
     },
     {
       "id": "t02",
@@ -52,22 +103,28 @@
       "reading": "ふくろはごりようですか？",
       "ko_meaning": "봉투는 필요하신가요?",
       "type": "choice",
-      "vocab_ids": ["ep001_v01", "ep001_v02"],
-      "situation": "짐이 많아서 봉투가 필요해. 한 장만 넣어달라고 하자.",
+      "vocab_ids": [
+        "ep001_v01",
+        "ep001_v02"
+      ],
       "choices": [
         {
           "id": "a",
           "jp": "はい、一枚ください。",
           "reading": "はい、いちまいください。",
-          "correct": true
+          "correct": true,
+          "jp_ruby": "いいえ、{結構|けっこう}です。"
         },
         {
           "id": "b",
           "jp": "いいえ、結構です。",
           "reading": "いいえ、けっこうです。",
-          "correct": false
+          "correct": false,
+          "jp_ruby": "はい、{一枚|いちまい}ください。"
         }
-      ]
+      ],
+      "jp_ruby": "{袋|ふくろ}はご{利用|りよう}ですか？",
+      "thought_ko": "봉투 한 장 넣어달라고 해야지"
     },
     {
       "id": "t03",
@@ -76,22 +133,28 @@
       "reading": "こちら、あたためますか？",
       "ko_meaning": "이거 데워드릴까요?",
       "type": "choice",
-      "vocab_ids": ["ep001_v05", "ep001_v06"],
-      "situation": "따뜻하게 먹고 싶으니까 데워달라고 해야지.",
+      "vocab_ids": [
+        "ep001_v05",
+        "ep001_v06"
+      ],
       "choices": [
         {
           "id": "a",
           "jp": "いいえ、そのままで大丈夫です。",
           "reading": "いいえ、そのままでだいじょうぶです。",
-          "correct": false
+          "correct": false,
+          "jp_ruby": "いいえ、そのままで{大丈夫|だいじょうぶ}です。"
         },
         {
           "id": "b",
           "jp": "はい、お願いします。",
           "reading": "はい、おねがいします。",
-          "correct": true
+          "correct": true,
+          "jp_ruby": "はい、お{願|ねが}いします。"
         }
-      ]
+      ],
+      "jp_ruby": "こちら、{温|あたた}めますか？",
+      "thought_ko": "응, 데워주세요 해야지"
     },
     {
       "id": "t04",
@@ -100,7 +163,11 @@
       "reading": "おかいけいはごひゃくえんになります。",
       "ko_meaning": "합계 500엔입니다.",
       "type": "listen",
-      "vocab_ids": ["ep001_v07", "ep001_v08"]
+      "vocab_ids": [
+        "ep001_v07",
+        "ep001_v08"
+      ],
+      "jp_ruby": "お{会計|かいけい}は{五百円|ごひゃくえん}になります。"
     },
     {
       "id": "t05",
@@ -109,22 +176,28 @@
       "reading": "ポイントカードはおもちですか？",
       "ko_meaning": "포인트 카드 있으신가요?",
       "type": "choice",
-      "vocab_ids": ["ep001_v09", "ep001_v10"],
-      "situation": "포인트 카드가 없는데... 없다고 말하자.",
+      "vocab_ids": [
+        "ep001_v09",
+        "ep001_v10"
+      ],
       "choices": [
         {
           "id": "a",
-          "jp": "はい、こちらです。",
-          "reading": "はい、こちらです。",
+          "jp": "ないです。作ってください。",
+          "jp_ruby": "ないです。{作|つく}ってください。",
+          "reading": "ないです。つくってください。",
           "correct": false
         },
         {
           "id": "b",
-          "jp": "いいえ、持っていません。",
-          "reading": "いいえ、もっていません。",
+          "jp": "ないんですが、作れますか？",
+          "jp_ruby": "ないんですが、{作|つく}れますか？",
+          "reading": "ないんですが、つくれますか？",
           "correct": true
         }
-      ]
+      ],
+      "jp_ruby": "ポイントカードはお{持|も}ちですか？",
+      "thought_ko": "포인트 카드 없는데, 새로 만들 수 있는지 물어봐야지"
     },
     {
       "id": "t06",
@@ -133,7 +206,8 @@
       "reading": "ありがとうございました！またおこしください。",
       "ko_meaning": "감사합니다! 또 오세요.",
       "type": "listen",
-      "vocab_ids": []
+      "vocab_ids": [],
+      "jp_ruby": "ありがとうございました！またお{越|こ}しください。"
     }
   ]
 }

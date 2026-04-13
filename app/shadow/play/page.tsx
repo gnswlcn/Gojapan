@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ep001 from '@/data/shadow_ep001.json';
+import ep002 from '@/data/shadow_ep002.json';
+import ep003 from '@/data/shadow_ep003.json';
+import ep004 from '@/data/shadow_ep004.json';
 import { useProgressStore } from '@/store/useProgressStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -16,16 +19,37 @@ interface NpcConfig {
   attack_messages: string[];
 }
 
+// Supports both ep001 format (id/kanji/meaning_ko) and ep002-004 format (vocab_id/jp/ko)
 interface VocabWord {
-  id: string;
-  kanji: string;
+  id?: string;
+  vocab_id?: string;
+  kanji?: string;
+  jp?: string;
   reading: string;
-  meaning_ko: string;
+  meaning_ko?: string;
+  ko?: string;
+}
+
+interface NormalizedVocab {
+  wordId: string;
+  display: string;
+  reading: string;
+  meaning: string;
+}
+
+function normalizeVocab(v: VocabWord): NormalizedVocab {
+  return {
+    wordId: (v.id ?? v.vocab_id) as string,
+    display: (v.kanji ?? v.jp) as string,
+    reading: v.reading,
+    meaning: (v.meaning_ko ?? v.ko) as string,
+  };
 }
 
 interface Choice {
   id: string;
   jp: string;
+  jp_ruby?: string;
   reading: string;
   correct: boolean;
 }
@@ -34,11 +58,13 @@ interface Turn {
   id: string;
   speaker: 'clerk';
   jp: string;
+  jp_ruby?: string;
   reading: string;
   ko_meaning: string;
   type: 'listen' | 'choice';
-  vocab_ids: string[];
-  situation?: string;   // 한국어 생각말풍선 — 내가 어떤 상황인지
+  vocab_ids?: string[];
+  situation?: string;    // legacy field
+  thought_ko?: string;   // new field (content agent naming)
   choices?: Choice[];
 }
 
@@ -51,7 +77,32 @@ interface EpisodeData {
 
 const EPISODES: Record<string, EpisodeData> = {
   ep001: ep001 as EpisodeData,
+  ep002: ep002 as EpisodeData,
+  ep003: ep003 as EpisodeData,
+  ep004: ep004 as EpisodeData,
 };
+
+// ─── Ruby text renderer ───────────────────────────────────────────────────────
+
+function RubyText({ text }: { text: string }) {
+  const parts = text.split(/(\{[^|{}]+\|[^|{}]+\})/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^\{(.+)\|(.+)\}$/);
+        if (m) {
+          return (
+            <ruby key={i}>
+              {m[1]}
+              <rt className="text-[0.55em] text-indigo-300/70">{m[2]}</rt>
+            </ruby>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
 
 // ─── TTS ─────────────────────────────────────────────────────────────────────
 
@@ -113,14 +164,14 @@ function PlayContent() {
     useProgressStore();
 
   // ── Core state ──────────────────────────────────────────────────────────
-  const [sessionKey, setSessionKey] = useState(0); // forces restart
+  const [sessionKey, setSessionKey] = useState(0);
   const [turnIdx, setTurnIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>('tts');
-  const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string } | null>(null);
+  const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string; jp_ruby?: string } | null>(null);
   const [showReading, setShowReading] = useState(true);
 
   // ── Vocab queue ─────────────────────────────────────────────────────────
-  const [vocabQueue, setVocabQueue] = useState<VocabWord[]>([]);
+  const [vocabQueue, setVocabQueue] = useState<NormalizedVocab[]>([]);
   const [afterVocabPhase, setAfterVocabPhase] = useState<'choosing' | 'shadow'>('choosing');
 
   // ── HP / NPC mood ────────────────────────────────────────────────────────
@@ -140,12 +191,15 @@ function PlayContent() {
   const advanceAfterTTS = useCallback(
     (turn: Turn) => {
       const unknownVocab = (turn.vocab_ids ?? [])
-        .map((vid) => episode.vocabulary.find((v) => v.id === vid))
+        .map((vid) => (episode.vocabulary as VocabWord[]).find((v) => v.id === vid || v.vocab_id === vid))
         .filter((v): v is VocabWord => !!v)
-        .filter((v) => (wordProgress[v.id]?.confidence ?? 0) < 3);
+        .map(normalizeVocab)
+        .filter((v) => (wordProgress[v.wordId]?.confidence ?? 0) < 3);
 
       const target: 'choosing' | 'shadow' = turn.type === 'listen' ? 'shadow' : 'choosing';
-      if (turn.type === 'listen') setChosenJp({ jp: turn.jp, reading: turn.reading });
+      if (turn.type === 'listen') {
+        setChosenJp({ jp: turn.jp, reading: turn.reading, jp_ruby: turn.jp_ruby });
+      }
 
       if (unknownVocab.length > 0) {
         setVocabQueue(unknownVocab);
@@ -193,8 +247,8 @@ function PlayContent() {
   const dismissVocab = useCallback(
     (known: boolean) => {
       const word = vocabQueue[0];
-      if (known) { increaseConfidence(word.id); setVocabLearned((n) => n + 1); }
-      else decreaseConfidence(word.id);
+      if (known) { increaseConfidence(word.wordId); setVocabLearned((n) => n + 1); }
+      else decreaseConfidence(word.wordId);
       const rest = vocabQueue.slice(1);
       if (rest.length === 0) setPhase(afterVocabPhase);
       else setVocabQueue(rest);
@@ -205,14 +259,13 @@ function PlayContent() {
   // ── Choice handler (with attack logic) ───────────────────────────────────
   const handleChoice = useCallback(
     (choice: Choice) => {
-      if (npcMood === 'attacking') return; // block during animation
+      if (npcMood === 'attacking') return;
 
       if (choice.correct) {
-        setChosenJp({ jp: choice.jp, reading: choice.reading });
+        setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby });
         setPhase('shadow');
         speak(choice.jp);
       } else {
-        // ── ATTACK ──
         const newHp = hp - 1;
         setHp(newHp);
         const msg = npc.attack_messages[Math.floor(Math.random() * npc.attack_messages.length)];
@@ -269,6 +322,9 @@ function PlayContent() {
       </div>
     );
   }
+
+  // thought bubble: support both thought_ko (new) and situation (legacy)
+  const thoughtText = currentTurn.thought_ko ?? currentTurn.situation;
 
   // ─────────────────────────────────────────────────────────────────────────
   // ── Main screen ──────────────────────────────────────────────────────────
@@ -434,7 +490,9 @@ function PlayContent() {
               }`}
             >
               <div className="text-white text-xl font-bold leading-snug tracking-wide">
-                {currentTurn.jp}
+                {currentTurn.jp_ruby
+                  ? <RubyText text={currentTurn.jp_ruby} />
+                  : currentTurn.jp}
               </div>
               {showReading && (
                 <div className="text-indigo-300/60 text-sm mt-1">{currentTurn.reading}</div>
@@ -471,7 +529,7 @@ function PlayContent() {
 
           {/* Vocab card */}
           {phase === 'vocab' && vocabQueue.length > 0 && (
-            <motion.div key={`vocab-${vocabQueue[0].id}`}
+            <motion.div key={`vocab-${vocabQueue[0].wordId}`}
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18 }}
               className="flex flex-col gap-3">
@@ -480,10 +538,10 @@ function PlayContent() {
                 {vocabQueue.length > 1 && <span className="text-gray-600">{vocabQueue.length}개 남음</span>}
               </div>
               <div className="bg-white/6 border border-white/10 rounded-3xl px-6 py-7 text-center">
-                <div className="text-6xl font-black text-white mb-2 tracking-tight">{vocabQueue[0].kanji}</div>
+                <div className="text-6xl font-black text-white mb-2 tracking-tight">{vocabQueue[0].display}</div>
                 <div className="text-lg text-gray-400 mb-4">{vocabQueue[0].reading}</div>
                 <div className="w-10 h-px bg-white/10 mx-auto mb-4" />
-                <div className="text-2xl font-bold text-white">{vocabQueue[0].meaning_ko}</div>
+                <div className="text-2xl font-bold text-white">{vocabQueue[0].meaning}</div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => dismissVocab(false)}
@@ -506,7 +564,7 @@ function PlayContent() {
               className="flex flex-col gap-3">
 
               {/* 한국어 생각말풍선 */}
-              {currentTurn.situation && (
+              {thoughtText && (
                 <motion.div
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -516,7 +574,7 @@ function PlayContent() {
                   <span className="text-lg mt-0.5 shrink-0">💭</span>
                   <div className="bg-white/8 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-2.5">
                     <p className="text-white/75 text-sm leading-relaxed italic">
-                      {currentTurn.situation}
+                      {thoughtText}
                     </p>
                   </div>
                 </motion.div>
@@ -537,7 +595,11 @@ function PlayContent() {
                     ${npcMood === 'attacking' ? 'opacity-40' : ''}
                   `}
                 >
-                  <div className="text-white font-bold text-lg leading-snug">{choice.jp}</div>
+                  <div className="text-white font-bold text-lg leading-snug">
+                    {choice.jp_ruby
+                      ? <RubyText text={choice.jp_ruby} />
+                      : choice.jp}
+                  </div>
                   {showReading && (
                     <div className="text-gray-400 text-sm mt-0.5">{choice.reading}</div>
                   )}
@@ -563,7 +625,11 @@ function PlayContent() {
                 {currentTurn.type === 'listen' && (
                   <div className="text-xs text-gray-400 uppercase tracking-widest mb-3">따라 말해보세요</div>
                 )}
-                <div className="text-white text-2xl font-bold leading-snug tracking-wide">{chosenJp.jp}</div>
+                <div className="text-white text-2xl font-bold leading-snug tracking-wide">
+                  {chosenJp.jp_ruby
+                    ? <RubyText text={chosenJp.jp_ruby} />
+                    : chosenJp.jp}
+                </div>
                 {showReading && (
                   <div className={`text-sm mt-1.5 ${currentTurn.type === 'choice' ? 'text-emerald-300/50' : 'text-gray-500'}`}>
                     {chosenJp.reading}
