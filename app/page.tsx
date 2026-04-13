@@ -118,6 +118,26 @@ export default function HomePage() {
         </div>
       </motion.div>
 
+      {/* Shadowing practice entry */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.28 }}
+        className="mx-4 mb-6"
+      >
+        <button
+          onClick={() => router.push('/shadow')}
+          className="w-full flex items-center gap-4 bg-white/5 hover:bg-white/10 active:scale-95 transition-all rounded-2xl px-5 py-4"
+        >
+          <div className="text-3xl">🎙️</div>
+          <div className="flex-1 text-left">
+            <div className="font-bold text-white text-sm">섀도잉 연습</div>
+            <div className="text-xs text-gray-400 mt-0.5">점원 롤플레이 · 말하기 훈련</div>
+          </div>
+          <div className="text-gray-600 text-lg">›</div>
+        </button>
+      </motion.div>
+
       {/* World map */}
       <div className="px-4 mb-4">
         <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">월드 맵</div>

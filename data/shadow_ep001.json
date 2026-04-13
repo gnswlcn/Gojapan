@@ -1,0 +1,110 @@
+{
+  "episode_info": {
+    "id": "ep001",
+    "title": "편의점에서",
+    "title_jp": "コンビニで",
+    "setting_ko": "편의점",
+    "setting_jp": "コンビニ",
+    "difficulty": "N5",
+    "thumbnail": "🏪",
+    "description": "편의점 점원과 기본 대화를 연습해봐요"
+  },
+  "dialogue_flow": [
+    {
+      "id": "t01",
+      "speaker": "clerk",
+      "jp": "いらっしゃいませ！",
+      "reading": "いらっしゃいませ！",
+      "ko_meaning": "어서 오세요!",
+      "type": "listen"
+    },
+    {
+      "id": "t02",
+      "speaker": "clerk",
+      "jp": "袋はご利用ですか？",
+      "reading": "ふくろはごりようですか？",
+      "ko_meaning": "봉투는 필요하신가요?",
+      "type": "choice",
+      "choices": [
+        {
+          "id": "a",
+          "ko": "아니요, 괜찮아요.",
+          "jp": "いいえ、大丈夫です。",
+          "reading": "いいえ、だいじょうぶです。",
+          "correct": false
+        },
+        {
+          "id": "b",
+          "ko": "네, 한 장 주세요.",
+          "jp": "はい、一枚ください。",
+          "reading": "はい、いちまいください。",
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "t03",
+      "speaker": "clerk",
+      "jp": "こちら、温めますか？",
+      "reading": "こちら、あたためますか？",
+      "ko_meaning": "이거 데워드릴까요?",
+      "type": "choice",
+      "choices": [
+        {
+          "id": "a",
+          "ko": "네, 부탁드려요.",
+          "jp": "はい、お願いします。",
+          "reading": "はい、おねがいします。",
+          "correct": true
+        },
+        {
+          "id": "b",
+          "ko": "아직 안 골랐어요.",
+          "jp": "まだ決めていないんですが。",
+          "reading": "まだきめていないんですが。",
+          "correct": false
+        }
+      ]
+    },
+    {
+      "id": "t04",
+      "speaker": "clerk",
+      "jp": "お会計は五百円になります。",
+      "reading": "おかいけいはごひゃくえんになります。",
+      "ko_meaning": "합계 500엔입니다.",
+      "type": "listen"
+    },
+    {
+      "id": "t05",
+      "speaker": "clerk",
+      "jp": "ポイントカードはお持ちですか？",
+      "reading": "ポイントカードはおもちですか？",
+      "ko_meaning": "포인트 카드 있으신가요?",
+      "type": "choice",
+      "choices": [
+        {
+          "id": "a",
+          "ko": "없는데 만들 수 있나요?",
+          "jp": "ないんですが、作れますか？",
+          "reading": "ないんですが、つくれますか？",
+          "correct": false
+        },
+        {
+          "id": "b",
+          "ko": "아니요, 없어요.",
+          "jp": "いいえ、持っていません。",
+          "reading": "いいえ、もっていません。",
+          "correct": true
+        }
+      ]
+    },
+    {
+      "id": "t06",
+      "speaker": "clerk",
+      "jp": "ありがとうございました！またお越しください。",
+      "reading": "ありがとうございました！またおこしください。",
+      "ko_meaning": "감사합니다! 또 오세요.",
+      "type": "listen"
+    }
+  ]
+}
