@@ -12,6 +12,9 @@
   },
   "npc": {
     "name": "편의점 알바생",
+    "image": "/characters/ep001_normal.png",
+    "image_blink": "/characters/ep001_blink.png",
+    "image_attack": "/characters/ep001_attack.png",
     "friendly_emoji": "🙂",
     "attack_emoji": "😤",
     "weapon_emoji": "🔪",

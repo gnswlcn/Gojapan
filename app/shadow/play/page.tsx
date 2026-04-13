@@ -13,7 +13,9 @@ import { useProgressStore } from '@/store/useProgressStore';
 
 interface NpcConfig {
   name: string;
-  image?: string;          // optional character image path (e.g. /characters/ep001.png)
+  image?: string;          // eyes open (normal)
+  image_blink?: string;    // eyes closed (blink)
+  image_attack?: string;   // attack pose
   friendly_emoji: string;
   attack_emoji: string;
   weapon_emoji: string;
@@ -92,28 +94,48 @@ interface NpcAvatarProps {
 }
 
 function NpcAvatar({ npc, mood }: NpcAvatarProps) {
+  const [isBlinking, setIsBlinking] = useState(false);
+  const blinkRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Periodic blink: schedule next blink randomly every 2.5–5s
+  useEffect(() => {
+    if (mood === 'attacking' || !npc.image_blink) return;
+
+    const schedule = () => {
+      blinkRef.current = setTimeout(() => {
+        setIsBlinking(true);
+        blinkRef.current = setTimeout(() => {
+          setIsBlinking(false);
+          schedule(); // queue next blink
+        }, 130); // eye-close duration
+      }, 2500 + Math.random() * 2500);
+    };
+
+    schedule();
+    return () => { if (blinkRef.current) clearTimeout(blinkRef.current); };
+  }, [mood, npc.image_blink]);
+
   const shakeAnim = mood === 'attacking'
-    ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.1, 1, 1.1, 1] }
+    ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.08, 1, 1.08, 1] }
     : { scale: 1, x: 0 };
 
   if (npc.image) {
+    const src =
+      mood === 'attacking' && npc.image_attack ? npc.image_attack :
+      isBlinking && npc.image_blink             ? npc.image_blink :
+                                                  npc.image;
     return (
       <motion.div
         animate={shakeAnim}
         transition={{ duration: 0.5 }}
-        className="relative shrink-0 w-20"
+        className="shrink-0 w-24 rounded-2xl overflow-hidden shadow-lg shadow-black/40 bg-white"
       >
-        {/* character portrait */}
         <img
-          src={npc.image}
+          src={src}
           alt={npc.name}
-          className="w-20 h-28 object-cover object-top rounded-2xl border-2 border-indigo-800/40 select-none"
+          className="w-24 h-32 object-contain object-top select-none"
           draggable={false}
         />
-        {/* emotion badge */}
-        <span className="absolute -bottom-1 -right-1 text-xl leading-none">
-          {mood === 'attacking' ? npc.attack_emoji : npc.friendly_emoji}
-        </span>
       </motion.div>
     );
   }
