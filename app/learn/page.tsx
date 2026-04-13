@@ -44,6 +44,12 @@ export default function LearnPage() {
   const handleKnown = useCallback(() => {
     const word = words[cardIndex];
     markKnown(word.id);
+    // 예문에 등장하는 다른 단어들도 함께 known 처리
+    if (word.example) {
+      word.example.forEach((seg) => {
+        if (seg.wId && seg.wId !== word.id) markKnown(seg.wId);
+      });
+    }
     setSessionKnown((prev) => [...prev, word.id]);
     advance();
   }, [words, cardIndex, markKnown, advance]);
@@ -126,7 +132,6 @@ export default function LearnPage() {
             onKnown={handleKnown}
             onLearning={handleLearning}
             cardIndex={cardIndex}
-            knownWords={knownWords}
           />
         )}
       </div>

@@ -10,10 +10,9 @@ interface FlashCardProps {
   onKnown: () => void;
   onLearning: () => void;
   cardIndex: number;
-  knownWords: string[];
 }
 
-export default function FlashCard({ word, onKnown, onLearning, cardIndex, knownWords }: FlashCardProps) {
+export default function FlashCard({ word, onKnown, onLearning, cardIndex }: FlashCardProps) {
   // Keyboard shortcuts
   const handleKnown = useCallback(onKnown, [onKnown]);
   const handleLearning = useCallback(onLearning, [onLearning]);
@@ -78,7 +77,7 @@ export default function FlashCard({ word, onKnown, onLearning, cardIndex, knownW
           {/* Example sentence */}
           {word.example && (
             <div className="w-full max-w-xs bg-white/5 rounded-2xl px-4 py-3">
-              <ExampleSentence segments={word.example} knownWords={knownWords} currentWordId={word.id} />
+              <ExampleSentence segments={word.example} currentWordId={word.id} />
             </div>
           )}
         </div>
