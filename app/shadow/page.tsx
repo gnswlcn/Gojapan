@@ -24,6 +24,33 @@ const EPISODES: EpisodeMeta[] = [
     description: '편의점 점원과 기본 대화를 연습해봐요',
     totalTurns: 6,
   },
+  {
+    id: 'ep002',
+    title: '돈키호테 면세 카운터',
+    setting_ko: '돈키호테 면세 카운터',
+    difficulty: 'N4',
+    thumbnail: '🦝',
+    description: '면세 처리부터 서명까지! 쇼핑 마무리를 완벽하게',
+    totalTurns: 5,
+  },
+  {
+    id: 'ep003',
+    title: '식당 웨이팅 취소',
+    setting_ko: '인기 식당 입구',
+    difficulty: 'N4',
+    thumbnail: '🍜',
+    description: '갑자기 웨이팅을 취소해야 할 때 당황하지 않는 법',
+    totalTurns: 5,
+  },
+  {
+    id: 'ep004',
+    title: '호텔 수건 추가 요청',
+    setting_ko: '호텔 프런트 (전화)',
+    difficulty: 'N4',
+    thumbnail: '🏨',
+    description: '프런트에 전화로 요청하기 — 조수사 枚(まい)도 잡아봐요',
+    totalTurns: 5,
+  },
 ];
 
 const DIFFICULTY_COLOR: Record<string, string> = {

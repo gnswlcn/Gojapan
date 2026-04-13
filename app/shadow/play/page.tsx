@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ep001 from '@/data/shadow_ep001.json';
+import ep002 from '@/data/shadow_ep002.json';
+import ep003 from '@/data/shadow_ep003.json';
+import ep004 from '@/data/shadow_ep004.json';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +42,9 @@ interface EpisodeData {
 // ─── Episode registry (static imports only — required for Next.js export) ────
 const EPISODES: Record<string, EpisodeData> = {
   ep001: ep001 as EpisodeData,
+  ep002: ep002 as EpisodeData,
+  ep003: ep003 as EpisodeData,
+  ep004: ep004 as EpisodeData,
 };
 
 // ─── TTS helper ──────────────────────────────────────────────────────────────
