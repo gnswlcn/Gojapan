@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { upsertWordProgress } from '@/lib/supabase';
 
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1';
 
@@ -31,7 +32,12 @@ export interface DailyStats {
   known: number;
 }
 
+function generateUserId(): string {
+  return 'u_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 interface ProgressState {
+  userId: string;
   wordProgress: Record<string, WordProgress>;
   completedEpisodes: string[];
   currentWorld: JlptLevel;
@@ -65,6 +71,7 @@ const updateStreak = (lastDate: string, currentStreak: number): number => {
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
+      userId: generateUserId(),
       wordProgress: {},
       completedEpisodes: [],
       currentWorld: 'N5',
@@ -72,29 +79,33 @@ export const useProgressStore = create<ProgressState>()(
       lastStudiedDate: '',
       dailyStats: {},
 
-      increaseConfidence: (wordId: string, amount = 1) =>
-        set((state) => {
-          const current = state.wordProgress[wordId];
-          const newConfidence = Math.min(5, (current?.confidence ?? 0) + amount);
-          return {
-            wordProgress: {
-              ...state.wordProgress,
-              [wordId]: { confidence: newConfidence, lastSeen: today() },
-            },
-          };
-        }),
+      increaseConfidence: (wordId: string, amount = 1) => {
+        const { userId, wordProgress } = get();
+        const current = wordProgress[wordId];
+        const newConfidence = Math.min(5, (current?.confidence ?? 0) + amount);
+        set((state) => ({
+          wordProgress: {
+            ...state.wordProgress,
+            [wordId]: { confidence: newConfidence, lastSeen: today() },
+          },
+        }));
+        // 백그라운드 Supabase 동기화 (fire-and-forget)
+        upsertWordProgress(userId, wordId, newConfidence);
+      },
 
-      decreaseConfidence: (wordId: string) =>
-        set((state) => {
-          const current = state.wordProgress[wordId];
-          const newConfidence = Math.max(0, (current?.confidence ?? 1) - 1);
-          return {
-            wordProgress: {
-              ...state.wordProgress,
-              [wordId]: { confidence: newConfidence, lastSeen: today() },
-            },
-          };
-        }),
+      decreaseConfidence: (wordId: string) => {
+        const { userId, wordProgress } = get();
+        const current = wordProgress[wordId];
+        const newConfidence = Math.max(0, (current?.confidence ?? 1) - 1);
+        set((state) => ({
+          wordProgress: {
+            ...state.wordProgress,
+            [wordId]: { confidence: newConfidence, lastSeen: today() },
+          },
+        }));
+        // 백그라운드 Supabase 동기화
+        upsertWordProgress(userId, wordId, newConfidence);
+      },
 
       markEpisodeComplete: (episodeId: string) =>
         set((state) => ({

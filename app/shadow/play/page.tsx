@@ -8,6 +8,7 @@ import ep002 from '@/data/shadow_ep002.json';
 import ep003 from '@/data/shadow_ep003.json';
 import ep004 from '@/data/shadow_ep004.json';
 import { useProgressStore } from '@/store/useProgressStore';
+import { fetchEpisodeById } from '@/lib/supabase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ interface EpisodeData {
   dialogue_flow: Turn[];
 }
 
-const EPISODES: Record<string, EpisodeData> = {
+const STATIC_EPISODES: Record<string, EpisodeData> = {
   ep001: ep001 as EpisodeData,
   ep002: ep002 as EpisodeData,
   ep003: ep003 as EpisodeData,
@@ -183,9 +184,19 @@ function PlayContent() {
   const router = useRouter();
   const params = useSearchParams();
   const epId = params.get('ep') ?? 'ep001';
-  const episode = EPISODES[epId] ?? EPISODES['ep001'];
-  const turns = episode.dialogue_flow;
-  const npc = episode.npc;
+
+  // ── Episode loading (static or Supabase) ─────────────────────────────────
+  const [episode, setEpisode] = useState<EpisodeData | null>(STATIC_EPISODES[epId] ?? null);
+  const [loadingEpisode, setLoadingEpisode] = useState(!STATIC_EPISODES[epId]);
+
+  useEffect(() => {
+    if (STATIC_EPISODES[epId]) { setEpisode(STATIC_EPISODES[epId]); setLoadingEpisode(false); return; }
+    setLoadingEpisode(true);
+    fetchEpisodeById(epId).then((data) => {
+      if (data) setEpisode(data.content as unknown as EpisodeData);
+      setLoadingEpisode(false);
+    });
+  }, [epId]);
 
   const { wordProgress, increaseConfidence, decreaseConfidence, markEpisodeComplete, recordDailyStudy } =
     useProgressStore();
@@ -205,21 +216,19 @@ function PlayContent() {
   const [hp, setHp] = useState(MAX_HP);
   const [npcMood, setNpcMood] = useState<NpcMood>('friendly');
   const [attackMsg, setAttackMsg] = useState('');
-  const [attackPending, setAttackPending] = useState(false); // popup stays until user confirms
+  const [attackPending, setAttackPending] = useState(false);
   const [isDead, setIsDead] = useState(false);
   const attackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Stats ────────────────────────────────────────────────────────────────
   const [vocabLearned, setVocabLearned] = useState(0);
 
-  const currentTurn = turns[turnIdx] as Turn;
-  const isLast = turnIdx === turns.length - 1;
-
   // ── Advance after TTS ────────────────────────────────────────────────────
   const advanceAfterTTS = useCallback(
     (turn: Turn) => {
+      const vocab = episode?.vocabulary ?? [];
       const unknownVocab = (turn.vocab_ids ?? [])
-        .map((vid) => (episode.vocabulary as VocabWord[]).find((v) => v.id === vid || v.vocab_id === vid))
+        .map((vid) => (vocab as VocabWord[]).find((v) => v.id === vid || v.vocab_id === vid))
         .filter((v): v is VocabWord => !!v)
         .map(normalizeVocab)
         .filter((v) => (wordProgress[v.wordId]?.confidence ?? 0) < 3);
@@ -237,22 +246,25 @@ function PlayContent() {
         setPhase(target);
       }
     },
-    [episode.vocabulary, wordProgress]
+    [episode?.vocabulary, wordProgress]
   );
 
   // ── TTS auto-play ────────────────────────────────────────────────────────
   useEffect(() => {
+    const turn = episode?.dialogue_flow[turnIdx] as Turn | undefined;
+    if (!turn) return;
+
     setPhase('tts');
     setChosenJp(null);
     setVocabQueue([]);
 
     let cleanup: (() => void) | undefined;
     const t = setTimeout(() => {
-      cleanup = speakWithFallback(currentTurn.jp, () => advanceAfterTTS(currentTurn));
+      cleanup = speakWithFallback(turn.jp, () => advanceAfterTTS(turn));
     }, 300);
 
     return () => { clearTimeout(t); cleanup?.(); };
-  }, [turnIdx, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [turnIdx, sessionKey, episode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     stopTTS();
@@ -292,10 +304,11 @@ function PlayContent() {
     if (hp <= 0) setIsDead(true);
   }, [hp]);
 
-  // ── Choice handler (with attack logic) ───────────────────────────────────
+  // ── Choice handler ───────────────────────────────────────────────────────
   const handleChoice = useCallback(
     (choice: Choice) => {
       if (npcMood === 'attacking' || attackPending) return;
+      const attackMessages = episode?.npc.attack_messages ?? [];
 
       if (choice.correct) {
         setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby, ko: choice.ko });
@@ -306,33 +319,53 @@ function PlayContent() {
         setWrongChoice(choice);
         const newHp = hp - 1;
         setHp(newHp);
-        const msg = npc.attack_messages[Math.floor(Math.random() * npc.attack_messages.length)];
+        const msg = attackMessages[Math.floor(Math.random() * attackMessages.length)];
         setAttackMsg(msg);
         setNpcMood('attacking');
         setAttackPending(true);
         stopTTS();
 
         if (attackTimerRef.current) clearTimeout(attackTimerRef.current);
-        // Timer only ends the flash/shake animation — popup stays until confirmed
-        attackTimerRef.current = setTimeout(() => {
-          setNpcMood('friendly');
-        }, 1600);
+        attackTimerRef.current = setTimeout(() => { setNpcMood('friendly'); }, 1600);
       }
     },
-    [hp, npc.attack_messages, npcMood, attackPending]
+    [hp, episode?.npc.attack_messages, npcMood, attackPending]
   );
 
   // ── Next turn ────────────────────────────────────────────────────────────
   const handleNext = useCallback(() => {
+    const flow = episode?.dialogue_flow ?? [];
+    const isLast = turnIdx === flow.length - 1;
     setWrongChoice(null);
     if (isLast) {
-      markEpisodeComplete(episode.episode_info.id);
-      recordDailyStudy(turns.length, vocabLearned);
+      markEpisodeComplete(episode?.episode_info.id ?? epId);
+      recordDailyStudy(flow.length, vocabLearned);
       setPhase('done');
     } else {
       setTurnIdx((i) => i + 1);
     }
-  }, [isLast, episode.episode_info.id, turns.length, vocabLearned, markEpisodeComplete, recordDailyStudy]);
+  }, [episode, epId, turnIdx, vocabLearned, markEpisodeComplete, recordDailyStudy]);
+
+  // ── Loading screen (after all hooks) ────────────────────────────────────
+  if (loadingEpisode || !episode) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <motion.div key={i} className="w-2 h-2 rounded-full bg-indigo-400"
+              animate={{ y: [0, -6, 0] }}
+              transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.12 }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Derived values (episode guaranteed non-null here) ────────────────────
+  const turns = episode.dialogue_flow;
+  const npc = episode.npc;
+  const currentTurn = turns[turnIdx] as Turn;
+  const isLast = turnIdx === turns.length - 1;
 
   // ─────────────────────────────────────────────────────────────────────────
   // ── Done screen ──────────────────────────────────────────────────────────

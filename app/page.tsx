@@ -2,21 +2,56 @@
 
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
 import { useProgressStore } from '@/store/useProgressStore';
 import { WORLD_CONFIG, LEVEL_ORDER } from '@/lib/wordSelector';
 import { ALL_EPISODES, episodesForWorld } from '@/lib/episodes';
+import { fetchGeneratedEpisodes, type DbEpisode } from '@/lib/supabase';
 import type { JlptLevel } from '@/store/useProgressStore';
 
+const EDGE_FN_URL = 'https://ormnjvmapbexmbwadnrb.supabase.co/functions/v1/generate-episode';
 const today = () => new Date().toISOString().split('T')[0];
 
 export default function HomePage() {
   const router = useRouter();
-  const { currentWorld, completedEpisodes, streak, dailyStats, setCurrentWorld } =
+  const { userId, currentWorld, completedEpisodes, streak, dailyStats, wordProgress, setCurrentWorld } =
     useProgressStore();
 
   const todayStudied = dailyStats[today()]?.studied ?? 0;
   const config = WORLD_CONFIG[currentWorld];
   const currentEpisodes = episodesForWorld(currentWorld);
+
+  // ── 맞춤 에피소드 ──────────────────────────────────────────────────────────
+  const [generatedEpisodes, setGeneratedEpisodes] = useState<DbEpisode[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    fetchGeneratedEpisodes().then(setGeneratedEpisodes);
+  }, []);
+
+  // 약한 단어 (confidence < 2) 추출
+  const weakWords = Object.entries(wordProgress)
+    .filter(([, p]) => p.confidence < 2)
+    .map(([id]) => id)
+    .slice(0, 10);
+
+  const requestNewEpisode = useCallback(async () => {
+    if (isGenerating || weakWords.length === 0) return;
+    setIsGenerating(true);
+    try {
+      const res = await fetch(EDGE_FN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, level: currentWorld, weakWords }),
+      });
+      if (res.ok) {
+        const fresh = await fetchGeneratedEpisodes();
+        setGeneratedEpisodes(fresh);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [isGenerating, weakWords, userId, currentWorld]);
 
   const isUnlocked = (level: JlptLevel): boolean => {
     const idx = LEVEL_ORDER.indexOf(level);
@@ -67,6 +102,58 @@ export default function HomePage() {
           <div className="text-xs text-gray-500">연속</div>
         </div>
       </motion.div>
+
+      {/* 맞춤 에피소드 섹션 */}
+      {(generatedEpisodes.length > 0 || weakWords.length >= 3) && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="mx-4 mb-5"
+        >
+          <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">🎯 맞춤 에피소드</div>
+          <div className="flex flex-col gap-2">
+            {generatedEpisodes
+              .filter((ep) => !completedEpisodes.includes(ep.id))
+              .slice(0, 3)
+              .map((ep) => {
+                const info = ep.content as { episode_info?: { title?: string; thumbnail?: string; description?: string } };
+                const title = info.episode_info?.title ?? '맞춤 에피소드';
+                const thumb = info.episode_info?.thumbnail ?? '🎯';
+                const desc = info.episode_info?.description ?? ep.target_words.join(', ');
+                return (
+                  <button
+                    key={ep.id}
+                    onClick={() => router.push(`/shadow/play?ep=${ep.id}`)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/40 transition-all active:scale-95"
+                  >
+                    <span className="text-2xl">{thumb}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm">{title}</div>
+                      <div className="text-xs text-indigo-200 mt-0.5 truncate">{desc}</div>
+                    </div>
+                    <span className="text-sm shrink-0">⚔️</span>
+                  </button>
+                );
+              })}
+
+            {/* 생성 버튼 */}
+            {weakWords.length >= 3 && (
+              <button
+                onClick={requestNewEpisode}
+                disabled={isGenerating}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-indigo-500/40 text-indigo-400 text-sm hover:bg-indigo-500/10 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isGenerating ? (
+                  <><span className="animate-spin">⏳</span> 생성 중...</>
+                ) : (
+                  <>✨ 내 약점 단어로 새 에피소드 만들기</>
+                )}
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Current world + episode list */}
       <motion.div
