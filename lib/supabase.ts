@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://ormnjvmapbexmbwadnrb.supabase.co';
-const SUPABASE_ANON_KEY =
+export const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ybW5qdm1hcGJleG1id2FkbnJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwODkzODAsImV4cCI6MjA5MTY2NTM4MH0.uVCm6nLfU23rHHwsYyvsHD4xeo7VMCATEHWGuoUZuEk';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

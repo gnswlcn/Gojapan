@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { getLocation } from '@/lib/locations';
 import { episodesForLocation } from '@/lib/episodes';
-import { fetchEpisodesForLocation, type DbEpisode } from '@/lib/supabase';
+import { fetchEpisodesForLocation, SUPABASE_ANON_KEY, type DbEpisode } from '@/lib/supabase';
 import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore';
 import type { LocationVocab } from '@/lib/locations';
 
@@ -122,7 +122,10 @@ export default function LocationClient() {
     setPendingEpisodeRequest(new Date().toISOString());
     fetch(EDGE_FN_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
       body: JSON.stringify({
         userId,
         locationId: loc!.id,
