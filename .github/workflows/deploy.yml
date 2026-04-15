@@ -5,6 +5,7 @@ on:
     branches:
       - claude/jlpt-word-learning-app-caE4L
       - main
+      - feat/immersive-ux-overhaul
 
 permissions:
   contents: read
