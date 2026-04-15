@@ -283,7 +283,7 @@ export default function LocationClient() {
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + i * 0.05 }}
-                onClick={() => router.push(`/shadow/play?ep=${ep.id}`)}
+                onClick={() => router.push(`/shadow/warm-up?ep=${ep.id}`)}
                 className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-left"
               >
                 <div className="text-3xl shrink-0">{ep.thumbnail}</div>
@@ -336,7 +336,7 @@ export default function LocationClient() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.15 + i * 0.05 }}
-                  onClick={() => router.push(`/shadow/play?ep=${ep.id}`)}
+                  onClick={() => router.push(`/shadow/warm-up?ep=${ep.id}`)}
                   className="flex items-center gap-3 p-4 rounded-2xl bg-indigo-950/40 border border-indigo-800/30 hover:bg-indigo-950/60 active:scale-95 transition-all text-left"
                 >
                   <div className="text-3xl shrink-0">{info?.thumbnail ?? '✨'}</div>
