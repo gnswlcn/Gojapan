@@ -61,6 +61,17 @@ export async function fetchGeneratedEpisodes(): Promise<DbEpisode[]> {
   return data ?? [];
 }
 
+// location_id는 level 컬럼에 저장됨 (Edge Function에서 level: locationId로 insert)
+export async function fetchEpisodesForLocation(locationId: string): Promise<DbEpisode[]> {
+  const { data } = await supabase
+    .from('episodes')
+    .select('*')
+    .eq('is_generated', true)
+    .eq('level', locationId)
+    .order('created_at', { ascending: false });
+  return data ?? [];
+}
+
 export async function fetchEpisodeById(id: string): Promise<DbEpisode | null> {
   const { data } = await supabase
     .from('episodes')

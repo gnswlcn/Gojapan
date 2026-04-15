@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { getLocation } from '@/lib/locations';
 import { episodesForLocation } from '@/lib/episodes';
-import { fetchGeneratedEpisodes, type DbEpisode } from '@/lib/supabase';
+import { fetchEpisodesForLocation, type DbEpisode } from '@/lib/supabase';
 import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore';
 import type { LocationVocab } from '@/lib/locations';
 
@@ -21,6 +21,14 @@ type GenEpContent = {
   };
 };
 
+interface UnifiedWord {
+  id: string;
+  jp: string;
+  reading: string;
+  ko: string;
+  isNew: boolean; // 에피소드에서 수확된 단어
+}
+
 export default function LocationClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -33,6 +41,8 @@ export default function LocationClient() {
     pendingEpisodeRequestedAt,
     setPendingEpisodeRequest,
     locationWordPools,
+    increaseConfidence,
+    decreaseConfidence,
   } = useProgressStore();
 
   // ── Generated episodes ───────────────────────────────────────────────────
@@ -44,19 +54,16 @@ export default function LocationClient() {
     Date.now() - new Date(pendingEpisodeRequestedAt).getTime() < 5 * 60 * 1000;
 
   const loadEpisodes = useCallback(() => {
-    fetchGeneratedEpisodes().then((all) => {
-      const locationEps = all.filter(
-        (ep) => (ep.content as GenEpContent).episode_info?.location_id === id
-      );
+    fetchEpisodesForLocation(id).then((eps) => {
       if (
         pendingEpisodeRequestedAt &&
-        locationEps.some(
+        eps.some(
           (ep) => new Date(ep.created_at) > new Date(pendingEpisodeRequestedAt)
         )
       ) {
         setPendingEpisodeRequest(null);
       }
-      setGenEps(locationEps);
+      setGenEps(eps);
       setLoadingEps(false);
     });
   }, [id, pendingEpisodeRequestedAt, setPendingEpisodeRequest]);
@@ -65,14 +72,14 @@ export default function LocationClient() {
     loadEpisodes();
   }, [loadEpisodes]);
 
-  // Poll every 5 s while generating
+  // Poll every 5s while generating
   useEffect(() => {
     if (!isGenerating) return;
     const interval = setInterval(loadEpisodes, 5000);
     return () => clearInterval(interval);
   }, [isGenerating, loadEpisodes]);
 
-  // ── Location lookup (after all hooks) ────────────────────────────────────
+  // ── Location lookup ───────────────────────────────────────────────────────
   const loc = getLocation(id);
 
   if (!loc) {
@@ -94,39 +101,22 @@ export default function LocationClient() {
 
   const staticEps = episodesForLocation(loc.id);
 
-  // ── 단어 풀: 시드 + 에피소드에서 수확된 단어 (jp 기준 중복 제거) ──────────
+  // ── 단어 풀: 시드 + 에피소드에서 수확된 단어 ─────────────────────────────
   const discoveredPool: DiscoveredWord[] = locationWordPools[loc.id] ?? [];
   const discoveredJpSet = new Set(discoveredPool.map((w) => w.jp));
-
-  // 시드 중 이미 에피소드에서 발견된 것은 discovered 쪽에서 표시 (통합)
   const seedOnly: LocationVocab[] = loc.vocab.filter((v) => !discoveredJpSet.has(v.jp));
 
-  // 단어의 실제 숙련도: 시드 ID와 discovered ID 중 높은 값 사용
-  function effectiveConf(jp: string, seedId: string): number {
-    const seedConf = wordProgress[seedId]?.confidence ?? 0;
-    const disc = discoveredPool.find((w) => w.jp === jp);
-    const discConf = disc ? (wordProgress[disc.id]?.confidence ?? 0) : 0;
-    return Math.max(seedConf, discConf);
-  }
-
-  // 약점 단어: 시드(미발견분) + discovered pool 전체에서 confidence < 3
-  const weakWords: string[] = [
-    ...seedOnly
-      .filter((v) => effectiveConf(v.jp, v.id) < 3)
-      .map((v) => `${v.jp}(${v.ko})`),
-    ...discoveredPool
-      .filter((w) => (wordProgress[w.id]?.confidence ?? 0) < 3)
-      .map((w) => `${w.jp}(${w.ko})`),
+  const allWords: UnifiedWord[] = [
+    ...seedOnly.map((v) => ({ ...v, isNew: false })),
+    ...discoveredPool.map((w) => ({ ...w, isNew: true })),
   ];
 
-  const totalWords = loc.vocab.length + discoveredPool.filter((w) => !loc.vocab.some((v) => v.jp === w.jp)).length;
-  const knownCount = [
-    ...loc.vocab.map((v) => effectiveConf(v.jp, v.id)),
-    ...discoveredPool
-      .filter((w) => !loc.vocab.some((v) => v.jp === w.jp))
-      .map((w) => wordProgress[w.id]?.confidence ?? 0),
-  ].filter((c) => c >= 3).length;
+  const totalWords = allWords.length;
+  const knownCount = allWords.filter((w) => (wordProgress[w.id]?.confidence ?? 0) >= 3).length;
+  const unknownWords = allWords.filter((w) => (wordProgress[w.id]?.confidence ?? 0) < 3);
+  const weakWords: string[] = unknownWords.map((w) => `${w.jp}(${w.ko})`);
 
+  // ── 에피소드 생성 요청 ───────────────────────────────────────────────────
   function requestEpisode() {
     if (isGenerating) return;
     setPendingEpisodeRequest(new Date().toISOString());
@@ -137,17 +127,27 @@ export default function LocationClient() {
         userId,
         locationId: loc!.id,
         locationName: loc!.name_ko,
-        locationVocab: [...loc!.vocab, ...discoveredPool],
+        locationVocab: allWords,
         weakWords,
       }),
     }).catch(console.error);
+  }
+
+  // ── 단어 탭: 알아요 ↔ 모르는 토글 ───────────────────────────────────────
+  function toggleWord(wordId: string) {
+    const conf = wordProgress[wordId]?.confidence ?? 0;
+    if (conf >= 3) {
+      decreaseConfidence(wordId);
+    } else {
+      increaseConfidence(wordId, 3);
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col pb-10">
 
       {/* ── Header ── */}
-      <div className="px-4 pt-8 pb-6">
+      <div className="px-4 pt-8 pb-4">
         <button
           onClick={() => router.push('/')}
           className="text-gray-500 hover:text-gray-300 text-sm mb-5 block"
@@ -168,75 +168,86 @@ export default function LocationClient() {
         </motion.div>
       </div>
 
-      {/* ── Vocab pool ── */}
-      <div className="px-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
+      {/* ── 단어 체크리스트 ── */}
+      <div className="px-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div className="text-xs text-gray-500 uppercase tracking-widest">
-            단어 풀 {totalWords}개
+            단어 {totalWords}개
           </div>
           <div className="text-xs text-gray-600">
             습득 <span className="text-emerald-400 font-bold">{knownCount}</span> / {totalWords}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          {/* 시드 단어 (discovered와 겹치지 않는 것) */}
-          {seedOnly.map((v, i) => {
-            const conf = effectiveConf(v.jp, v.id);
-            const known = conf >= 3;
-            return (
-              <motion.div
-                key={v.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-                className={`rounded-2xl p-3 border transition-colors ${
-                  known ? 'bg-emerald-950/30 border-emerald-800/30' : 'bg-white/5 border-transparent'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <div>
-                    <div className="text-white font-bold text-base leading-tight">{v.jp}</div>
-                    <div className="text-gray-500 text-xs">{v.reading}</div>
-                  </div>
-                  {known && <span className="text-emerald-400 text-xs shrink-0">✓</span>}
-                </div>
-                <div className="text-gray-300 text-sm">{v.ko}</div>
-              </motion.div>
-            );
-          })}
+        <p className="text-[11px] text-gray-600 mb-3">
+          아는 단어를 탭해서 체크 → 모르는 단어만 드릴합니다
+        </p>
 
-          {/* 에피소드에서 수확된 단어 */}
-          {discoveredPool.map((w, i) => {
+        <div className="flex flex-col gap-1.5">
+          {allWords.map((w, i) => {
             const conf = wordProgress[w.id]?.confidence ?? 0;
             const known = conf >= 3;
             return (
-              <motion.div
+              <motion.button
                 key={w.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.03 }}
-                className={`rounded-2xl p-3 border transition-colors ${
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.015 }}
+                onClick={() => toggleWord(w.id)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all active:scale-[0.98] text-left w-full ${
                   known
-                    ? 'bg-emerald-950/30 border-emerald-800/30'
-                    : 'bg-indigo-950/30 border-indigo-800/20'
+                    ? 'bg-emerald-950/40 border-emerald-800/40'
+                    : 'bg-white/5 border-transparent'
                 }`}
               >
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <div>
-                    <div className="text-white font-bold text-base leading-tight">{w.jp}</div>
-                    <div className="text-gray-500 text-xs">{w.reading}</div>
-                  </div>
-                  {known
-                    ? <span className="text-emerald-400 text-xs shrink-0">✓</span>
-                    : <span className="text-indigo-400/60 text-[10px] shrink-0">NEW</span>
-                  }
+                {/* 체크 원 */}
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                  known
+                    ? 'bg-emerald-500 border-emerald-500'
+                    : 'border-gray-600'
+                }`}>
+                  {known && <span className="text-white text-[10px] font-black leading-none">✓</span>}
                 </div>
-                <div className="text-gray-300 text-sm">{w.ko}</div>
-              </motion.div>
+
+                {/* 단어 정보 */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`font-bold text-base ${known ? 'text-emerald-300' : 'text-white'}`}>
+                      {w.jp}
+                    </span>
+                    <span className="text-gray-500 text-xs">{w.reading}</span>
+                    {w.isNew && (
+                      <span className="text-indigo-400/60 text-[10px] bg-indigo-900/30 px-1.5 py-0.5 rounded-full">
+                        NEW
+                      </span>
+                    )}
+                  </div>
+                  <div className={`text-sm mt-0.5 ${known ? 'text-emerald-400/70' : 'text-gray-400'}`}>
+                    {w.ko}
+                  </div>
+                </div>
+              </motion.button>
             );
           })}
         </div>
+      </div>
+
+      {/* ── 드릴 CTA ── */}
+      <div className="px-4 mb-6">
+        {unknownWords.length > 0 ? (
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={() => router.push(`/shadow/vocab-drill?loc=${loc.id}`)}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-base rounded-2xl active:scale-95 transition-all shadow-lg shadow-indigo-900/40"
+          >
+            모르는 단어 {unknownWords.length}개 드릴하기 →
+          </motion.button>
+        ) : totalWords > 0 ? (
+          <div className="text-center py-3 text-emerald-400 text-sm font-bold">
+            모든 단어를 알고 있어요! 에피소드를 바로 시작하세요 🎉
+          </div>
+        ) : null}
       </div>
 
       {/* ── Episodes ── */}
@@ -263,12 +274,8 @@ export default function LocationClient() {
           >
             <span className="animate-spin text-base">⏳</span>
             <div>
-              <div className="text-indigo-300 text-sm font-bold">
-                맞춤 에피소드 생성 중...
-              </div>
-              <div className="text-indigo-400/60 text-xs">
-                완료되면 자동으로 추가돼요
-              </div>
+              <div className="text-indigo-300 text-sm font-bold">맞춤 에피소드 생성 중...</div>
+              <div className="text-indigo-400/60 text-xs">완료되면 자동으로 추가돼요</div>
             </div>
           </motion.div>
         )}
@@ -283,7 +290,7 @@ export default function LocationClient() {
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + i * 0.05 }}
-                onClick={() => router.push(`/shadow/warm-up?ep=${ep.id}`)}
+                onClick={() => router.push(`/shadow/play?ep=${ep.id}`)}
                 className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-left"
               >
                 <div className="text-3xl shrink-0">{ep.thumbnail}</div>
@@ -296,12 +303,8 @@ export default function LocationClient() {
                       </span>
                     )}
                   </div>
-                  <div className="text-gray-400 text-xs mt-0.5">
-                    {ep.description}
-                  </div>
-                  <div className="text-gray-600 text-xs mt-1">
-                    {ep.totalTurns}턴
-                  </div>
+                  <div className="text-gray-400 text-xs mt-0.5">{ep.description}</div>
+                  <div className="text-gray-600 text-xs mt-1">{ep.totalTurns}턴</div>
                 </div>
                 <span className="text-gray-600 shrink-0">›</span>
               </motion.button>
@@ -317,11 +320,7 @@ export default function LocationClient() {
                     key={i}
                     className="w-1.5 h-1.5 rounded-full bg-indigo-400/50"
                     animate={{ y: [0, -4, 0] }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 0.6,
-                      delay: i * 0.12,
-                    }}
+                    transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.12 }}
                   />
                 ))}
               </div>
@@ -336,7 +335,7 @@ export default function LocationClient() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.15 + i * 0.05 }}
-                  onClick={() => router.push(`/shadow/warm-up?ep=${ep.id}`)}
+                  onClick={() => router.push(`/shadow/play?ep=${ep.id}`)}
                   className="flex items-center gap-3 p-4 rounded-2xl bg-indigo-950/40 border border-indigo-800/30 hover:bg-indigo-950/60 active:scale-95 transition-all text-left"
                 >
                   <div className="text-3xl shrink-0">{info?.thumbnail ?? '✨'}</div>
@@ -353,9 +352,7 @@ export default function LocationClient() {
                       )}
                     </div>
                     {info?.description && (
-                      <div className="text-gray-400 text-xs mt-0.5">
-                        {info.description}
-                      </div>
+                      <div className="text-gray-400 text-xs mt-0.5">{info.description}</div>
                     )}
                   </div>
                   <span className="text-gray-600 shrink-0">›</span>
@@ -375,9 +372,7 @@ export default function LocationClient() {
                 className="text-center py-10"
               >
                 <div className="text-4xl mb-3">📭</div>
-                <div className="text-gray-500 text-sm">
-                  아직 에피소드가 없어요
-                </div>
+                <div className="text-gray-500 text-sm">아직 에피소드가 없어요</div>
                 <div className="text-gray-600 text-xs mt-1">
                   위 버튼으로 첫 에피소드를 만들어보세요!
                 </div>

@@ -2,8 +2,10 @@
 // JLPT 레벨 대신 "장소" 단위로 학습을 구조화
 // 단어도 장소 기준으로 묶임 → 실전 회화 직결
 
+import { stableWordId } from './wordId';
+
 export interface LocationVocab {
-  id: string;
+  id: string;  // stableWordId(jp, reading) — 모든 소스에서 일관된 confidence 키
   jp: string;
   reading: string;
   ko: string;
@@ -286,10 +288,23 @@ export const MORE_LOCATIONS: LocationConfig[] = [
   },
 ];
 
+// vocab ID를 stableWordId로 정규화하여 에피소드 vocab ID와 항상 일치시킴
+function normalizeLocIds(locs: LocationConfig[]): LocationConfig[] {
+  return locs.map((loc) => ({
+    ...loc,
+    vocab: loc.vocab.map((v) => ({ ...v, id: stableWordId(v.jp, v.reading) })),
+  }));
+}
+
+export const LOCATIONS: LocationConfig[] = normalizeLocIds([
+  ...STATIC_LOCATIONS,
+  ...MORE_LOCATIONS,
+]);
+
 export function getAllLocations(): LocationConfig[] {
-  return [...STATIC_LOCATIONS, ...MORE_LOCATIONS];
+  return LOCATIONS;
 }
 
 export function getLocation(id: string): LocationConfig | undefined {
-  return getAllLocations().find((l) => l.id === id);
+  return LOCATIONS.find((l) => l.id === id);
 }

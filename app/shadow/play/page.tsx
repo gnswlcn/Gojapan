@@ -10,6 +10,7 @@ import ep004 from '@/data/shadow_ep004.json';
 import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore';
 import { fetchEpisodeById } from '@/lib/supabase';
 import { ALL_EPISODES } from '@/lib/episodes';
+import { stableWordId } from '@/lib/wordId';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,9 +44,10 @@ interface NormalizedVocab {
 }
 
 function normalizeVocab(v: VocabWord): NormalizedVocab {
+  const jp = (v.kanji ?? v.jp ?? '') as string;
   return {
-    wordId: (v.id ?? v.vocab_id) as string,
-    display: (v.kanji ?? v.jp) as string,
+    wordId: stableWordId(jp, v.reading),
+    display: jp,
     reading: v.reading,
     meaning: (v.meaning_ko ?? v.ko) as string,
   };
@@ -292,9 +294,18 @@ function PlayContent() {
     setSessionKey((k) => k + 1);
   }, []);
 
+  // ── Vocab card ready (tap-through guard) ────────────────────────────────
+  const [vocabReady, setVocabReady] = useState(false);
+  useEffect(() => {
+    if (phase !== 'vocab') { setVocabReady(false); return; }
+    const t = setTimeout(() => setVocabReady(true), 350);
+    return () => clearTimeout(t);
+  }, [phase, vocabQueue[0]?.wordId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Vocab handlers ───────────────────────────────────────────────────────
   const dismissVocab = useCallback(
     (known: boolean) => {
+      if (!vocabReady) return;
       const word = vocabQueue[0];
       if (known) { increaseConfidence(word.wordId); setVocabLearned((n) => n + 1); }
       else decreaseConfidence(word.wordId);
@@ -302,7 +313,7 @@ function PlayContent() {
       if (rest.length === 0) setPhase(afterVocabPhase);
       else setVocabQueue(rest);
     },
-    [vocabQueue, afterVocabPhase, increaseConfidence, decreaseConfidence]
+    [vocabQueue, afterVocabPhase, increaseConfidence, decreaseConfidence, vocabReady]
   );
 
   // ── Confirm attack popup ─────────────────────────────────────────────────
@@ -359,13 +370,17 @@ function PlayContent() {
 
       if (locationId && episode?.vocabulary) {
         const discovered: DiscoveredWord[] = (episode.vocabulary as VocabWord[])
-          .map((v) => ({
-            id: (v.id ?? v.vocab_id ?? '') as string,
-            jp: (v.kanji ?? v.jp ?? '') as string,
-            reading: v.reading,
-            ko: (v.meaning_ko ?? v.ko ?? '') as string,
-          }))
-          .filter((w) => w.id && w.jp && w.reading && w.ko);
+          .map((v) => {
+            const jp = (v.kanji ?? v.jp ?? '') as string;
+            const reading = v.reading ?? '';
+            return {
+              id: stableWordId(jp, reading),
+              jp,
+              reading,
+              ko: (v.meaning_ko ?? v.ko ?? '') as string,
+            };
+          })
+          .filter((w) => w.jp && w.reading && w.ko);
         addWordsToLocation(locationId, discovered);
       }
 
@@ -646,11 +661,13 @@ function PlayContent() {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => dismissVocab(false)}
-                  className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold active:scale-95 transition-all">
+                  disabled={!vocabReady}
+                  className="flex-1 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold active:scale-95 transition-all disabled:opacity-40">
                   몰라요
                 </button>
                 <button onClick={() => dismissVocab(true)}
-                  className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold active:scale-95 transition-all">
+                  disabled={!vocabReady}
+                  className="flex-1 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold active:scale-95 transition-all disabled:opacity-40">
                   알아요 ✓
                 </button>
               </div>
