@@ -32,6 +32,14 @@ export interface DailyStats {
   known: number;
 }
 
+// 에피소드에서 수확된 단어 — jp를 기준으로 중복 제거
+export interface DiscoveredWord {
+  id: string;       // vocab_id from episode (= wordProgress key)
+  jp: string;
+  reading: string;
+  ko: string;
+}
+
 function generateUserId(): string {
   return 'u_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -46,6 +54,7 @@ interface ProgressState {
   dailyStats: Record<string, DailyStats>;
   pendingEpisodeRequestedAt: string | null; // ISO timestamp, null = 요청 없음
   unlockedLocationIds: string[]; // 사용자가 추가한 장소 IDs
+  locationWordPools: Record<string, DiscoveredWord[]>; // locationId → 수확된 단어들
 
   // Actions
   increaseConfidence: (wordId: string, amount?: number) => void;
@@ -55,6 +64,7 @@ interface ProgressState {
   setCurrentWorld: (level: JlptLevel) => void;
   setPendingEpisodeRequest: (at: string | null) => void;
   unlockLocation: (id: string) => void;
+  addWordsToLocation: (locationId: string, words: DiscoveredWord[]) => void;
   resetProgress: () => void;
 }
 
@@ -84,6 +94,7 @@ export const useProgressStore = create<ProgressState>()(
       lastStudiedDate: '',
       dailyStats: {},
       unlockedLocationIds: [],
+      locationWordPools: {},
 
       increaseConfidence: (wordId: string, amount = 1) => {
         const { userId, wordProgress } = get();
@@ -152,6 +163,20 @@ export const useProgressStore = create<ProgressState>()(
             : [...state.unlockedLocationIds, id],
         })),
 
+      addWordsToLocation: (locationId: string, words: DiscoveredWord[]) =>
+        set((state) => {
+          const existing = state.locationWordPools[locationId] ?? [];
+          const existingJp = new Set(existing.map((w) => w.jp));
+          const newWords = words.filter((w) => w.jp && w.reading && w.ko && !existingJp.has(w.jp));
+          if (newWords.length === 0) return state;
+          return {
+            locationWordPools: {
+              ...state.locationWordPools,
+              [locationId]: [...existing, ...newWords],
+            },
+          };
+        }),
+
       resetProgress: () =>
         set({
           wordProgress: {},
@@ -162,6 +187,7 @@ export const useProgressStore = create<ProgressState>()(
           dailyStats: {},
           pendingEpisodeRequestedAt: null,
           unlockedLocationIds: [],
+          locationWordPools: {},
         }),
     }),
     {

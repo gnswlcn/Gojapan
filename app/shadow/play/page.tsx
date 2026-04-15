@@ -7,8 +7,9 @@ import ep001 from '@/data/shadow_ep001.json';
 import ep002 from '@/data/shadow_ep002.json';
 import ep003 from '@/data/shadow_ep003.json';
 import ep004 from '@/data/shadow_ep004.json';
-import { useProgressStore } from '@/store/useProgressStore';
+import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore';
 import { fetchEpisodeById } from '@/lib/supabase';
+import { ALL_EPISODES } from '@/lib/episodes';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -198,8 +199,14 @@ function PlayContent() {
     });
   }, [epId]);
 
-  const { wordProgress, increaseConfidence, decreaseConfidence, markEpisodeComplete, recordDailyStudy } =
-    useProgressStore();
+  const {
+    wordProgress,
+    increaseConfidence,
+    decreaseConfidence,
+    markEpisodeComplete,
+    recordDailyStudy,
+    addWordsToLocation,
+  } = useProgressStore();
 
   // ── Core state ──────────────────────────────────────────────────────────
   const [sessionKey, setSessionKey] = useState(0);
@@ -338,13 +345,35 @@ function PlayContent() {
     const isLast = turnIdx === flow.length - 1;
     setWrongChoice(null);
     if (isLast) {
-      markEpisodeComplete(episode?.episode_info.id ?? epId);
+      const episodeId = episode?.episode_info.id ?? epId;
+      markEpisodeComplete(episodeId);
       recordDailyStudy(flow.length, vocabLearned);
+
+      // ── 에피소드 완료: vocab을 장소 pool에 수확 ──────────────────────────
+      const epInfo = episode?.episode_info as
+        | { id: string; title: string; thumbnail: string; location_id?: string }
+        | undefined;
+      const locationId =
+        epInfo?.location_id ??
+        ALL_EPISODES.find((e) => e.id === episodeId)?.locationId;
+
+      if (locationId && episode?.vocabulary) {
+        const discovered: DiscoveredWord[] = (episode.vocabulary as VocabWord[])
+          .map((v) => ({
+            id: (v.id ?? v.vocab_id ?? '') as string,
+            jp: (v.kanji ?? v.jp ?? '') as string,
+            reading: v.reading,
+            ko: (v.meaning_ko ?? v.ko ?? '') as string,
+          }))
+          .filter((w) => w.id && w.jp && w.reading && w.ko);
+        addWordsToLocation(locationId, discovered);
+      }
+
       setPhase('done');
     } else {
       setTurnIdx((i) => i + 1);
     }
-  }, [episode, epId, turnIdx, vocabLearned, markEpisodeComplete, recordDailyStudy]);
+  }, [episode, epId, turnIdx, vocabLearned, markEpisodeComplete, recordDailyStudy, addWordsToLocation]);
 
   // ── Loading screen (after all hooks) ────────────────────────────────────
   if (loadingEpisode || !episode) {

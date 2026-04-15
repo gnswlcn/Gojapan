@@ -6,7 +6,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { getLocation } from '@/lib/locations';
 import { episodesForLocation } from '@/lib/episodes';
 import { fetchGeneratedEpisodes, type DbEpisode } from '@/lib/supabase';
-import { useProgressStore } from '@/store/useProgressStore';
+import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore';
+import type { LocationVocab } from '@/lib/locations';
 
 const EDGE_FN_URL =
   'https://ormnjvmapbexmbwadnrb.supabase.co/functions/v1/generate-episode';
@@ -31,6 +32,7 @@ export default function LocationClient() {
     completedEpisodes,
     pendingEpisodeRequestedAt,
     setPendingEpisodeRequest,
+    locationWordPools,
   } = useProgressStore();
 
   // ── Generated episodes ───────────────────────────────────────────────────
@@ -92,9 +94,38 @@ export default function LocationClient() {
 
   const staticEps = episodesForLocation(loc.id);
 
-  const weakWords = loc.vocab
-    .filter((v) => (wordProgress[v.id]?.confidence ?? 0) < 3)
-    .map((v) => `${v.jp}(${v.ko})`);
+  // ── 단어 풀: 시드 + 에피소드에서 수확된 단어 (jp 기준 중복 제거) ──────────
+  const discoveredPool: DiscoveredWord[] = locationWordPools[loc.id] ?? [];
+  const discoveredJpSet = new Set(discoveredPool.map((w) => w.jp));
+
+  // 시드 중 이미 에피소드에서 발견된 것은 discovered 쪽에서 표시 (통합)
+  const seedOnly: LocationVocab[] = loc.vocab.filter((v) => !discoveredJpSet.has(v.jp));
+
+  // 단어의 실제 숙련도: 시드 ID와 discovered ID 중 높은 값 사용
+  function effectiveConf(jp: string, seedId: string): number {
+    const seedConf = wordProgress[seedId]?.confidence ?? 0;
+    const disc = discoveredPool.find((w) => w.jp === jp);
+    const discConf = disc ? (wordProgress[disc.id]?.confidence ?? 0) : 0;
+    return Math.max(seedConf, discConf);
+  }
+
+  // 약점 단어: 시드(미발견분) + discovered pool 전체에서 confidence < 3
+  const weakWords: string[] = [
+    ...seedOnly
+      .filter((v) => effectiveConf(v.jp, v.id) < 3)
+      .map((v) => `${v.jp}(${v.ko})`),
+    ...discoveredPool
+      .filter((w) => (wordProgress[w.id]?.confidence ?? 0) < 3)
+      .map((w) => `${w.jp}(${w.ko})`),
+  ];
+
+  const totalWords = loc.vocab.length + discoveredPool.filter((w) => !loc.vocab.some((v) => v.jp === w.jp)).length;
+  const knownCount = [
+    ...loc.vocab.map((v) => effectiveConf(v.jp, v.id)),
+    ...discoveredPool
+      .filter((w) => !loc.vocab.some((v) => v.jp === w.jp))
+      .map((w) => wordProgress[w.id]?.confidence ?? 0),
+  ].filter((c) => c >= 3).length;
 
   function requestEpisode() {
     if (isGenerating) return;
@@ -106,7 +137,7 @@ export default function LocationClient() {
         userId,
         locationId: loc!.id,
         locationName: loc!.name_ko,
-        locationVocab: loc!.vocab,
+        locationVocab: [...loc!.vocab, ...discoveredPool],
         weakWords,
       }),
     }).catch(console.error);
@@ -137,39 +168,71 @@ export default function LocationClient() {
         </motion.div>
       </div>
 
-      {/* ── Vocab grid ── */}
+      {/* ── Vocab pool ── */}
       <div className="px-4 mb-6">
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">
-          핵심 단어 {loc.vocab.length}개
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs text-gray-500 uppercase tracking-widest">
+            단어 풀 {totalWords}개
+          </div>
+          <div className="text-xs text-gray-600">
+            습득 <span className="text-emerald-400 font-bold">{knownCount}</span> / {totalWords}
+          </div>
         </div>
+
         <div className="grid grid-cols-2 gap-2">
-          {loc.vocab.map((v, i) => {
-            const conf = wordProgress[v.id]?.confidence ?? 0;
+          {/* 시드 단어 (discovered와 겹치지 않는 것) */}
+          {seedOnly.map((v, i) => {
+            const conf = effectiveConf(v.jp, v.id);
             const known = conf >= 3;
             return (
               <motion.div
                 key={v.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
+                transition={{ delay: i * 0.03 }}
                 className={`rounded-2xl p-3 border transition-colors ${
-                  known
-                    ? 'bg-emerald-950/30 border-emerald-800/30'
-                    : 'bg-white/5 border-transparent'
+                  known ? 'bg-emerald-950/30 border-emerald-800/30' : 'bg-white/5 border-transparent'
                 }`}
               >
                 <div className="flex items-start justify-between gap-1 mb-1">
                   <div>
-                    <div className="text-white font-bold text-base leading-tight">
-                      {v.jp}
-                    </div>
+                    <div className="text-white font-bold text-base leading-tight">{v.jp}</div>
                     <div className="text-gray-500 text-xs">{v.reading}</div>
                   </div>
-                  {known && (
-                    <span className="text-emerald-400 text-xs shrink-0">✓</span>
-                  )}
+                  {known && <span className="text-emerald-400 text-xs shrink-0">✓</span>}
                 </div>
                 <div className="text-gray-300 text-sm">{v.ko}</div>
+              </motion.div>
+            );
+          })}
+
+          {/* 에피소드에서 수확된 단어 */}
+          {discoveredPool.map((w, i) => {
+            const conf = wordProgress[w.id]?.confidence ?? 0;
+            const known = conf >= 3;
+            return (
+              <motion.div
+                key={w.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.03 }}
+                className={`rounded-2xl p-3 border transition-colors ${
+                  known
+                    ? 'bg-emerald-950/30 border-emerald-800/30'
+                    : 'bg-indigo-950/30 border-indigo-800/20'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-1 mb-1">
+                  <div>
+                    <div className="text-white font-bold text-base leading-tight">{w.jp}</div>
+                    <div className="text-gray-500 text-xs">{w.reading}</div>
+                  </div>
+                  {known
+                    ? <span className="text-emerald-400 text-xs shrink-0">✓</span>
+                    : <span className="text-indigo-400/60 text-[10px] shrink-0">NEW</span>
+                  }
+                </div>
+                <div className="text-gray-300 text-sm">{w.ko}</div>
               </motion.div>
             );
           })}
