@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { upsertWordProgress } from '@/lib/supabase';
+import type { LastSession } from '@/lib/sessionUtils';
 
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1';
 
@@ -55,6 +56,7 @@ interface ProgressState {
   pendingEpisodeRequestedAt: string | null; // ISO timestamp, null = 요청 없음
   unlockedLocationIds: string[]; // 사용자가 추가한 장소 IDs
   locationWordPools: Record<string, DiscoveredWord[]>; // locationId → 수확된 단어들
+  lastSession: LastSession | null;
 
   // Actions
   increaseConfidence: (wordId: string, amount?: number) => void;
@@ -65,6 +67,8 @@ interface ProgressState {
   setPendingEpisodeRequest: (at: string | null) => void;
   unlockLocation: (id: string) => void;
   addWordsToLocation: (locationId: string, words: DiscoveredWord[]) => void;
+  saveSession: (episodeId: string, turnIndex: number, locationId: string) => void;
+  clearSession: () => void;
   resetProgress: () => void;
 }
 
@@ -95,6 +99,7 @@ export const useProgressStore = create<ProgressState>()(
       dailyStats: {},
       unlockedLocationIds: [],
       locationWordPools: {},
+      lastSession: null,
 
       increaseConfidence: (wordId: string, amount = 1) => {
         const { userId, wordProgress } = get();
@@ -177,6 +182,18 @@ export const useProgressStore = create<ProgressState>()(
           };
         }),
 
+      saveSession: (episodeId: string, turnIndex: number, locationId: string) =>
+        set({
+          lastSession: {
+            episodeId,
+            turnIndex,
+            locationId,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+
+      clearSession: () => set({ lastSession: null }),
+
       resetProgress: () =>
         set({
           wordProgress: {},
@@ -188,6 +205,7 @@ export const useProgressStore = create<ProgressState>()(
           pendingEpisodeRequestedAt: null,
           unlockedLocationIds: [],
           locationWordPools: {},
+          lastSession: null,
         }),
     }),
     {

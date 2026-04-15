@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ep001 from '@/data/shadow_ep001.json';
@@ -11,6 +11,9 @@ import { useProgressStore, type DiscoveredWord } from '@/store/useProgressStore'
 import { fetchEpisodeById } from '@/lib/supabase';
 import { ALL_EPISODES } from '@/lib/episodes';
 import { stableWordId } from '@/lib/wordId';
+import { phaseVariants, bubbleVariants, quickFade, snappySpring, correctPulse, wrongShake, progressSpring, choiceVariants } from '@/lib/animations';
+import { hapticSuccess, hapticError } from '@/lib/haptics';
+import { findCorrectChoice, applyComboAction, buildCompletionSummary } from '@/lib/sessionUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -95,12 +98,15 @@ const STATIC_EPISODES: Record<string, EpisodeData> = {
 interface NpcAvatarProps {
   npc: NpcConfig;
   mood: 'friendly' | 'attacking';
+  bounce?: boolean;
 }
 
-function NpcAvatar({ npc, mood }: NpcAvatarProps) {
+function NpcAvatar({ npc, mood, bounce }: NpcAvatarProps) {
   const shakeAnim = mood === 'attacking'
     ? { x: [-6, 6, -5, 5, -3, 3, 0], scale: [1, 1.08, 1, 1.08, 1] }
-    : { scale: 1, x: 0 };
+    : bounce
+      ? { y: [0, -8, 0, -4, 0], scale: [1, 1.1, 1, 1.05, 1] }
+      : { scale: 1, x: 0 };
 
   return (
     <motion.div
@@ -208,6 +214,8 @@ function PlayContent() {
     markEpisodeComplete,
     recordDailyStudy,
     addWordsToLocation,
+    saveSession,
+    clearSession,
   } = useProgressStore();
 
   // ── Core state ──────────────────────────────────────────────────────────
@@ -216,6 +224,27 @@ function PlayContent() {
   const [phase, setPhase] = useState<Phase>('tts');
   const [chosenJp, setChosenJp] = useState<{ jp: string; reading: string; jp_ruby?: string; ko?: string } | null>(null);
   const [wrongChoice, setWrongChoice] = useState<Choice | null>(null);
+  const [correctChoiceId, setCorrectChoiceId] = useState<string | null>(null);
+  const [feedbackChoiceId, setFeedbackChoiceId] = useState<string | null>(null);
+  const [npcBounce, setNpcBounce] = useState(false);
+  const [combo, setCombo] = useState(0);
+
+  // ── Session start time ──────────────────────────────────────────────────
+  const [startTime] = useState(() => Date.now());
+
+  // ── Confetti particles (stable across re-renders) ───────────────────────
+  const confettiParticles = useMemo(() => {
+    const colors = ['#6366f1', '#10b981', '#f97316', '#ec4899', '#eab308']; // indigo, emerald, orange, pink, yellow
+    return Array.from({ length: 18 }, (_, i) => ({
+      id: i,
+      color: colors[i % colors.length],
+      x: (Math.random() - 0.5) * 300,
+      y: (Math.random() - 0.5) * 300,
+      rotation: Math.random() * 720 - 360,
+      scale: Math.random() * 0.5 + 0.5,
+      delay: Math.random() * 0.3,
+    }));
+  }, []);
 
   // ── Vocab queue ─────────────────────────────────────────────────────────
   const [vocabQueue, setVocabQueue] = useState<NormalizedVocab[]>([]);
@@ -270,7 +299,7 @@ function PlayContent() {
     let cleanup: (() => void) | undefined;
     const t = setTimeout(() => {
       cleanup = speakWithFallback(turn.jp, () => advanceAfterTTS(turn));
-    }, 300);
+    }, 150);
 
     return () => { clearTimeout(t); cleanup?.(); };
   }, [turnIdx, sessionKey, episode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -290,15 +319,20 @@ function PlayContent() {
     setAttackMsg('');
     setVocabLearned(0);
     setWrongChoice(null);
+    setCorrectChoiceId(null);
+    setFeedbackChoiceId(null);
+    setNpcBounce(false);
+    setCombo(0);
+    clearSession();
     setTurnIdx(0);
     setSessionKey((k) => k + 1);
-  }, []);
+  }, [clearSession]);
 
   // ── Vocab card ready (tap-through guard) ────────────────────────────────
   const [vocabReady, setVocabReady] = useState(false);
   useEffect(() => {
     if (phase !== 'vocab') { setVocabReady(false); return; }
-    const t = setTimeout(() => setVocabReady(true), 350);
+    const t = setTimeout(() => setVocabReady(true), 200);
     return () => clearTimeout(t);
   }, [phase, vocabQueue[0]?.wordId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -329,11 +363,28 @@ function PlayContent() {
       const attackMessages = episode?.npc.attack_messages ?? [];
 
       if (choice.correct) {
+        hapticSuccess();
+        setFeedbackChoiceId(choice.id);
+        setCorrectChoiceId(null);
+        setNpcBounce(true);
+        setCombo(c => applyComboAction(c, true));
         setChosenJp({ jp: choice.jp, reading: choice.reading, jp_ruby: choice.jp_ruby, ko: choice.ko });
         setWrongChoice(null);
-        setPhase('shadow');
+        // Delay phase transition to show correctPulse animation
+        setTimeout(() => {
+          setPhase('shadow');
+          setFeedbackChoiceId(null);
+          setNpcBounce(false);
+        }, 400);
         speak(choice.jp);
       } else {
+        hapticError();
+        setFeedbackChoiceId(choice.id);
+        setCombo(c => applyComboAction(c, false));
+        // Highlight the correct answer using findCorrectChoice
+        const choices = episode?.dialogue_flow[turnIdx]?.choices ?? [];
+        const correct = findCorrectChoice(choices as { id: string; jp: string; ko: string; correct: boolean }[]);
+        setCorrectChoiceId(correct?.id ?? null);
         setWrongChoice(choice);
         const newHp = hp - 1;
         setHp(newHp);
@@ -347,7 +398,7 @@ function PlayContent() {
         attackTimerRef.current = setTimeout(() => { setNpcMood('friendly'); }, 1600);
       }
     },
-    [hp, episode?.npc.attack_messages, npcMood, attackPending]
+    [hp, episode?.npc.attack_messages, npcMood, attackPending, episode?.dialogue_flow, turnIdx]
   );
 
   // ── Next turn ────────────────────────────────────────────────────────────
@@ -355,6 +406,8 @@ function PlayContent() {
     const flow = episode?.dialogue_flow ?? [];
     const isLast = turnIdx === flow.length - 1;
     setWrongChoice(null);
+    setCorrectChoiceId(null);
+    setFeedbackChoiceId(null);
     if (isLast) {
       const episodeId = episode?.episode_info.id ?? epId;
       markEpisodeComplete(episodeId);
@@ -384,11 +437,23 @@ function PlayContent() {
         addWordsToLocation(locationId, discovered);
       }
 
+      clearSession();
       setPhase('done');
     } else {
+      // Save session at the next turn index for resume
+      const episodeId = episode?.episode_info.id ?? epId;
+      const epInfo = episode?.episode_info as
+        | { id: string; title: string; thumbnail: string; location_id?: string }
+        | undefined;
+      const locationId =
+        epInfo?.location_id ??
+        ALL_EPISODES.find((e) => e.id === episodeId)?.locationId;
+      if (locationId) {
+        saveSession(episodeId, turnIdx + 1, locationId);
+      }
       setTurnIdx((i) => i + 1);
     }
-  }, [episode, epId, turnIdx, vocabLearned, markEpisodeComplete, recordDailyStudy, addWordsToLocation]);
+  }, [episode, epId, turnIdx, vocabLearned, markEpisodeComplete, recordDailyStudy, addWordsToLocation, saveSession, clearSession]);
 
   // ── Loading screen (after all hooks) ────────────────────────────────────
   if (loadingEpisode || !episode) {
@@ -414,15 +479,36 @@ function PlayContent() {
   // ─────────────────────────────────────────────────────────────────────────
   // ── Done screen ──────────────────────────────────────────────────────────
   if (phase === 'done') {
+    const summary = buildCompletionSummary(vocabLearned, hp, startTime);
+    const totalSec = Math.floor(summary.elapsedMs / 1000);
+    const minutes = Math.floor(totalSec / 60);
+    const seconds = totalSec % 60;
+    const elapsedText = minutes > 0 ? `${minutes}분 ${seconds}초` : `${seconds}초`;
+
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-6 px-6 text-center">
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-6 px-6 text-center relative overflow-hidden">
+        {/* Confetti particles */}
+        {confettiParticles.map((p) => (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 1, x: 0, y: 0, scale: 0, rotate: 0 }}
+            animate={{ opacity: 0, x: p.x, y: p.y, scale: p.scale, rotate: p.rotation }}
+            transition={{ duration: 1.2, delay: p.delay, ease: 'easeOut' }}
+            className="absolute w-3 h-3 rounded-full pointer-events-none"
+            style={{ backgroundColor: p.color, top: '45%', left: '50%' }}
+          />
+        ))}
+
         <motion.div initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 14 }} className="text-7xl">🎉</motion.div>
         <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15 }}>
           <div className="text-white text-2xl font-black mb-2">에피소드 클리어!</div>
           <div className="text-gray-400 text-sm">
-            단어 <span className="text-indigo-300 font-bold">{vocabLearned}개</span> 획득 ·
-            잔여 HP <span className="text-red-400 font-bold">{'❤️'.repeat(hp)}</span>
+            단어 <span className="text-indigo-300 font-bold">{summary.vocabLearned}개</span> 획득 ·
+            잔여 HP <span className="text-red-400 font-bold">{'❤️'.repeat(summary.hp)}</span>
+          </div>
+          <div className="text-gray-500 text-xs mt-1.5">
+            ⏱ 소요 시간 <span className="text-gray-300 font-bold">{elapsedText}</span>
           </div>
         </motion.div>
         <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
@@ -582,11 +668,29 @@ function PlayContent() {
             <div className="w-16" />
           </div>
 
+          {/* Combo counter */}
+          <AnimatePresence>
+            {combo >= 2 && (
+              <motion.div
+                key={combo}
+                initial={{ scale: 0.3, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={snappySpring}
+                className="text-center py-1"
+              >
+                <span className="text-orange-400 font-black text-sm">
+                  🔥 x{combo} 콤보!
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Progress bar */}
           <div className="h-1 bg-white/10 rounded-full overflow-hidden">
             <motion.div className="h-full bg-indigo-500 rounded-full"
               animate={{ width: `${((turnIdx + 1) / turns.length) * 100}%` }}
-              transition={{ duration: 0.4 }} />
+              transition={progressSpring} />
           </div>
         </div>
       </div>
@@ -594,16 +698,17 @@ function PlayContent() {
       {/* ── NPC bubble ── */}
       <div className="px-4 mt-4 max-w-sm mx-auto w-full">
         <div className="flex gap-3 items-start">
-          <NpcAvatar npc={npc} mood={npcMood} />
+          <NpcAvatar npc={npc} mood={npcMood} bounce={npcBounce} />
 
           {/* Speech bubble */}
           <AnimatePresence mode="wait">
             <motion.div
               key={currentTurn.id}
-              initial={{ opacity: 0, x: -12, scale: 0.97 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.97 }}
-              transition={{ duration: 0.15 }}
+              variants={bubbleVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={quickFade}
               className={`flex-1 rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-300 ${
                 npcMood === 'attacking'
                   ? 'bg-red-950/60 border-red-500/30'
@@ -631,7 +736,12 @@ function PlayContent() {
 
           {/* TTS indicator */}
           {phase === 'tts' && (
-            <motion.div key="tts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            <motion.div key="tts"
+              variants={phaseVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={quickFade}
               className="flex justify-center py-8">
               <div className="flex gap-1.5 items-center">
                 {[0, 1, 2].map((i) => (
@@ -646,8 +756,11 @@ function PlayContent() {
           {/* Vocab card */}
           {phase === 'vocab' && vocabQueue.length > 0 && (
             <motion.div key={`vocab-${vocabQueue[0].wordId}`}
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18 }}
+              variants={phaseVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={snappySpring}
               className="flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs text-gray-500 px-1">
                 <span className="uppercase tracking-widest">이 단어 알아요?</span>
@@ -677,8 +790,11 @@ function PlayContent() {
           {/* Choice buttons */}
           {phase === 'choosing' && currentTurn.choices && (
             <motion.div key="choices"
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }}
+              variants={phaseVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={snappySpring}
               className="flex flex-col gap-3">
 
               {/* 한국어 생각말풍선 */}
@@ -702,31 +818,58 @@ function PlayContent() {
                 맞는 일본어를 골라보세요
               </div>
 
-              {currentTurn.choices.map((choice) => {
-                const isWrong = wrongChoice?.id === choice.id;
+              {currentTurn.choices.map((choice, index) => {
+                const isWrong = feedbackChoiceId === choice.id && !choice.correct;
+                const isCorrectFeedback = feedbackChoiceId === choice.id && choice.correct;
+                const isHighlightedCorrect = correctChoiceId === choice.id;
+                const feedbackVariant = isCorrectFeedback
+                  ? correctPulse
+                  : isWrong
+                    ? wrongShake
+                    : undefined;
+
                 return (
-                  <button
+                  <motion.button
                     key={choice.id}
-                    disabled={npcMood === 'attacking' || attackPending}
+                    variants={feedbackVariant ?? choiceVariants}
+                    custom={index}
+                    initial="initial"
+                    animate="animate"
+                    whileTap={{ scale: 0.95 }}
+                    disabled={npcMood === 'attacking' || attackPending || !!feedbackChoiceId}
                     onClick={() => handleChoice(choice)}
                     className={`w-full py-4 px-5 rounded-2xl text-left
-                      active:scale-95 transition-all duration-100 disabled:pointer-events-none
+                      active:scale-95 transition-colors duration-100 disabled:pointer-events-none
                       border-2
-                      ${isWrong
-                        ? 'bg-red-950/30 border-red-500/40'
-                        : 'bg-white/8 border-white/10 hover:bg-white/12'}
+                      ${isCorrectFeedback
+                        ? 'bg-emerald-900/40 border-emerald-500/60'
+                        : isWrong
+                          ? 'bg-red-950/40 border-red-500/50'
+                          : isHighlightedCorrect
+                            ? 'bg-emerald-900/30 border-emerald-500/40 ring-2 ring-emerald-400/30'
+                            : wrongChoice?.id === choice.id
+                              ? 'bg-red-950/30 border-red-500/40'
+                              : 'bg-white/8 border-white/10 hover:bg-white/12'}
                       ${(npcMood === 'attacking' || attackPending) ? 'opacity-40' : ''}
                     `}
                   >
-                    <div className="text-white font-bold text-lg leading-snug">
-                      {choice.jp_ruby
-                        ? <RubyText text={choice.jp_ruby} />
-                        : choice.jp}
+                    <div className="flex items-center justify-between">
+                      <div className="text-white font-bold text-lg leading-snug">
+                        {choice.jp_ruby
+                          ? <RubyText text={choice.jp_ruby} />
+                          : choice.jp}
+                      </div>
+                      {isCorrectFeedback && (
+                        <span className="text-emerald-400 text-xl ml-2">✓</span>
+                      )}
+                      {isHighlightedCorrect && (
+                        <span className="text-emerald-400/80 text-sm ml-2">정답</span>
+                      )}
                     </div>
-                    {isWrong && choice.ko && (
+                    {(isWrong || wrongChoice?.id === choice.id) && choice.ko && (
                       <div className="text-red-400/80 text-sm mt-1">→ {choice.ko}</div>
                     )}
-                  </button>
+                  </motion.button>
                 );
               })}
             </motion.div>
@@ -735,8 +878,11 @@ function PlayContent() {
           {/* Shadow panel */}
           {phase === 'shadow' && chosenJp && (
             <motion.div key="shadow"
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+              variants={phaseVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={snappySpring}
               className="flex flex-col gap-4">
               <div className={`rounded-2xl px-5 py-4 text-center border ${
                 currentTurn.type === 'choice'
