@@ -45,6 +45,7 @@ interface ProgressState {
   lastStudiedDate: string;
   dailyStats: Record<string, DailyStats>;
   pendingEpisodeRequestedAt: string | null; // ISO timestamp, null = 요청 없음
+  unlockedLocationIds: string[]; // 사용자가 추가한 장소 IDs
 
   // Actions
   increaseConfidence: (wordId: string, amount?: number) => void;
@@ -53,6 +54,7 @@ interface ProgressState {
   recordDailyStudy: (studied: number, known: number) => void;
   setCurrentWorld: (level: JlptLevel) => void;
   setPendingEpisodeRequest: (at: string | null) => void;
+  unlockLocation: (id: string) => void;
   resetProgress: () => void;
 }
 
@@ -81,6 +83,7 @@ export const useProgressStore = create<ProgressState>()(
       pendingEpisodeRequestedAt: null,
       lastStudiedDate: '',
       dailyStats: {},
+      unlockedLocationIds: [],
 
       increaseConfidence: (wordId: string, amount = 1) => {
         const { userId, wordProgress } = get();
@@ -142,6 +145,13 @@ export const useProgressStore = create<ProgressState>()(
       setPendingEpisodeRequest: (at: string | null) =>
         set({ pendingEpisodeRequestedAt: at }),
 
+      unlockLocation: (id: string) =>
+        set((state) => ({
+          unlockedLocationIds: state.unlockedLocationIds.includes(id)
+            ? state.unlockedLocationIds
+            : [...state.unlockedLocationIds, id],
+        })),
+
       resetProgress: () =>
         set({
           wordProgress: {},
@@ -151,6 +161,7 @@ export const useProgressStore = create<ProgressState>()(
           lastStudiedDate: '',
           dailyStats: {},
           pendingEpisodeRequestedAt: null,
+          unlockedLocationIds: [],
         }),
     }),
     {
