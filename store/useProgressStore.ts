@@ -44,6 +44,7 @@ interface ProgressState {
   streak: number;
   lastStudiedDate: string;
   dailyStats: Record<string, DailyStats>;
+  pendingEpisodeRequestedAt: string | null; // ISO timestamp, null = 요청 없음
 
   // Actions
   increaseConfidence: (wordId: string, amount?: number) => void;
@@ -51,6 +52,7 @@ interface ProgressState {
   markEpisodeComplete: (episodeId: string) => void;
   recordDailyStudy: (studied: number, known: number) => void;
   setCurrentWorld: (level: JlptLevel) => void;
+  setPendingEpisodeRequest: (at: string | null) => void;
   resetProgress: () => void;
 }
 
@@ -76,6 +78,7 @@ export const useProgressStore = create<ProgressState>()(
       completedEpisodes: [],
       currentWorld: 'N5',
       streak: 0,
+      pendingEpisodeRequestedAt: null,
       lastStudiedDate: '',
       dailyStats: {},
 
@@ -136,6 +139,9 @@ export const useProgressStore = create<ProgressState>()(
 
       setCurrentWorld: (level: JlptLevel) => set({ currentWorld: level }),
 
+      setPendingEpisodeRequest: (at: string | null) =>
+        set({ pendingEpisodeRequestedAt: at }),
+
       resetProgress: () =>
         set({
           wordProgress: {},
@@ -144,6 +150,7 @@ export const useProgressStore = create<ProgressState>()(
           streak: 0,
           lastStudiedDate: '',
           dailyStats: {},
+          pendingEpisodeRequestedAt: null,
         }),
     }),
     {

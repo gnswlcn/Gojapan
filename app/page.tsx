@@ -12,10 +12,14 @@ import type { JlptLevel } from '@/store/useProgressStore';
 const EDGE_FN_URL = 'https://ormnjvmapbexmbwadnrb.supabase.co/functions/v1/generate-episode';
 const today = () => new Date().toISOString().split('T')[0];
 
+const PENDING_EXPIRE_MS = 5 * 60 * 1000; // 5분 후 자동 만료
+
 export default function HomePage() {
   const router = useRouter();
-  const { userId, currentWorld, completedEpisodes, streak, dailyStats, wordProgress, setCurrentWorld } =
-    useProgressStore();
+  const {
+    userId, currentWorld, completedEpisodes, streak, dailyStats, wordProgress,
+    setCurrentWorld, pendingEpisodeRequestedAt, setPendingEpisodeRequest,
+  } = useProgressStore();
 
   const todayStudied = dailyStats[today()]?.studied ?? 0;
   const config = WORLD_CONFIG[currentWorld];
@@ -23,11 +27,33 @@ export default function HomePage() {
 
   // ── 맞춤 에피소드 ──────────────────────────────────────────────────────────
   const [generatedEpisodes, setGeneratedEpisodes] = useState<DbEpisode[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
 
+  // 새로고침 후에도 유지되는 생성 중 상태
+  const isGenerating = !!pendingEpisodeRequestedAt &&
+    Date.now() - new Date(pendingEpisodeRequestedAt).getTime() < PENDING_EXPIRE_MS;
+
+  // 에피소드 목록 로드 + 생성 완료 감지
+  const loadEpisodes = useCallback(async () => {
+    const fresh = await fetchGeneratedEpisodes();
+    setGeneratedEpisodes(fresh);
+    // 요청 이후 새 에피소드가 생겼으면 pending 해제
+    if (pendingEpisodeRequestedAt) {
+      const hasNew = fresh.some(
+        (ep) => new Date(ep.created_at) > new Date(pendingEpisodeRequestedAt)
+      );
+      if (hasNew) setPendingEpisodeRequest(null);
+    }
+  }, [pendingEpisodeRequestedAt, setPendingEpisodeRequest]);
+
+  // 최초 로드
+  useEffect(() => { loadEpisodes(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 생성 중이면 3초마다 폴링
   useEffect(() => {
-    fetchGeneratedEpisodes().then(setGeneratedEpisodes);
-  }, []);
+    if (!isGenerating) return;
+    const timer = setInterval(loadEpisodes, 3000);
+    return () => clearInterval(timer);
+  }, [isGenerating, loadEpisodes]);
 
   // 약한 단어 (confidence < 2) 추출
   const weakWords = Object.entries(wordProgress)
@@ -37,21 +63,14 @@ export default function HomePage() {
 
   const requestNewEpisode = useCallback(async () => {
     if (isGenerating || weakWords.length === 0) return;
-    setIsGenerating(true);
-    try {
-      const res = await fetch(EDGE_FN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, level: currentWorld, weakWords }),
-      });
-      if (res.ok) {
-        const fresh = await fetchGeneratedEpisodes();
-        setGeneratedEpisodes(fresh);
-      }
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [isGenerating, weakWords, userId, currentWorld]);
+    // localStorage에 요청 시각 저장 → 새로고침해도 유지
+    setPendingEpisodeRequest(new Date().toISOString());
+    fetch(EDGE_FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, level: currentWorld, weakWords }),
+    }).catch(() => setPendingEpisodeRequest(null)); // 요청 실패 시 해제
+  }, [isGenerating, weakWords, userId, currentWorld, setPendingEpisodeRequest]);
 
   const isUnlocked = (level: JlptLevel): boolean => {
     const idx = LEVEL_ORDER.indexOf(level);
